@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-**Stages 1–2 (data acquisition, baselines) implemented; Stages 3–6 not yet started.** `docs/BUILD_PLAN.md` is the full project specification. All three conda environments, the multi-stage `Dockerfile`, and the CI workflow exist. `src/stage3_models/` through `src/stage6_reporting/` are empty package stubs (directory + `__init__.py` only) — that's intentional scaffolding matching `docs/BUILD_PLAN.md` §7, not partial implementation. Fill each in when that stage actually starts, and update this file's commands as you go.
+**Stages 1–3a (data acquisition, baselines, GEARS) implemented; Stages 3b–6 not yet started.** `docs/BUILD_PLAN.md` is the full project specification. All three conda environments, the multi-stage `Dockerfile`, and the CI workflow exist. `src/stage3_models/` still has `scgpt_wrapper.py`/`geneformer_wrapper.py` to go; `src/stage4_conventional_metrics/` through `src/stage6_reporting/` are empty package stubs (directory + `__init__.py` only) — that's intentional scaffolding matching `docs/BUILD_PLAN.md` §7, not partial implementation. Fill each in when that stage actually starts, and update this file's commands as you go.
 
 ## Commands
 
@@ -12,7 +12,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Run the fast unit tests (no network) — what CI's unit-tests job runs
 pytest tests/ -m "not integration" -v
 
-# Run everything including real GEARS-download/fit integration tests
+# Run everything including real GEARS-download/fit/train integration tests
 pytest tests/ -v
 
 # Stage 1 — download + split a dataset (writes into ./data)
@@ -20,7 +20,11 @@ python -m src.stage1_data.cli --dataset adamson
 python -m src.stage1_data.cli --dataset norman
 ```
 
-Stage 2 (`src/stage2_baselines/`) has no CLI of its own by design — `no_change.py`, `mean_baseline.py`, `ridge_baseline.py` are just importable `fit(adata, train_conditions)` / `predict(condition)` classes, exercised via `tests/test_stage2_baselines.py`. They'll get driven end-to-end once Stage 4 (metrics) or Stage 6 (reporting) exists to actually consume their predictions.
+Stages 2 and 3a have no CLI of their own by design — they're importable classes exercised via tests, not yet wired into an end-to-end runner:
+- `src/stage2_baselines/` — `no_change.py`, `mean_baseline.py`, `ridge_baseline.py`: `fit(adata, train_conditions)` / `predict(condition)`, tested in `tests/test_stage2_baselines.py`.
+- `src/stage3_models/gears_wrapper.py` — `GearsModel`: `fit(pert_data)` / `predict(condition)` (also `save(path)`/`load(pert_data, path)`), tested in `tests/test_stage3a_gears.py`. Note the different `fit()` signature from Stage 2 — see "Working conventions" below for why.
+
+They'll get driven end-to-end once Stage 4 (metrics) or Stage 6 (reporting) exists to actually consume their predictions.
 
 All of the above assume the `perturb-bench` conda env is active (see Environment setup below) — `gears`/`torch_geometric` aren't installed outside it, so these commands will import-error in a bare system Python.
 
@@ -60,7 +64,7 @@ The `geneformer` target intentionally does not clone/install Geneformer at build
 
 Two jobs, both on `requirements.txt` (pip, not conda — matches the `cpu` Docker target):
 - **`unit-tests`** — fast, no network, runs `pytest -m "not integration"`.
-- **`data-smoke-test`** (depends on `unit-tests`) — runs `pytest tests/ -m integration -v` against real data: GEARS's actual download path (Stage 1) plus fitting all three baselines against the real split (Stage 2). `./data` is cached across runs by dataset name (the `data_dir` fixture in `tests/conftest.py` intentionally does *not* use pytest's `tmp_path`, so this cache actually hits). Dataset defaults to Adamson (smaller, single-gene) via the `PERTDATA_TEST_DATASET` env var, which both `test_stage1_data.py` and `test_stage2_baselines.py`'s integration tests read — trigger Norman via `workflow_dispatch` with `dataset: norman` when needed. New stages should just add their own `@pytest.mark.integration` tests; this job picks them up automatically, no `ci.yml` edits required.
+- **`data-smoke-test`** (depends on `unit-tests`, `timeout-minutes: 20` as a safety net) — runs `pytest tests/ -m integration -v` against real data: GEARS's actual download path (Stage 1), fitting all three baselines against the real split (Stage 2), and — as of Stage 3a — a minimal (`epochs=1`, `hidden_size=8`; see `configs/training_hyperparameters.yaml`'s `stage3a_gears.smoke_test`) real GEARS training run. `./data` is cached across runs by dataset name (the `data_dir` fixture in `tests/conftest.py` intentionally does *not* use pytest's `tmp_path`, so this cache actually hits). Dataset defaults to Adamson (smaller, single-gene) via the `PERTDATA_TEST_DATASET` env var, read by every integration test — trigger Norman via `workflow_dispatch` with `dataset: norman` when needed. New stages should just add their own `@pytest.mark.integration` tests; this job picks them up automatically, no `ci.yml` edits required. GEARS is the one DL model BUILD_PLAN.md §5 calls out for automatic CI smoke-testing (scaled down) — scGPT/Geneformer fine-tuning stay manual/on-demand, never wired into this job.
 
 ## What this project is
 
@@ -96,20 +100,23 @@ Six sequential stages, each with a distinct owner discipline (see `docs/BUILD_PL
 
 ```
 src/
-├── stage1_data/             # created — load_data.py (PertData wrapper), cli.py
-├── stage2_baselines/        # created — no_change.py, mean_baseline.py, ridge_baseline.py
-├── stage3_models/           # stub only — gears_wrapper.py, scgpt_wrapper.py, geneformer_wrapper.py go here
+├── perturbation_conditions.py    # created — shared 'GENE+ctrl'/'GENE1+GENE2' condition-string parsing (used by ridge_baseline.py and gears_wrapper.py)
+├── stage1_data/              # created — load_data.py (PertData wrapper), cli.py
+├── stage2_baselines/         # created — no_change.py, mean_baseline.py, ridge_baseline.py
+├── stage3_models/            # gears_wrapper.py created; scgpt_wrapper.py, geneformer_wrapper.py still to go
 ├── stage4_conventional_metrics/  # stub only
 ├── stage5_calibration/      # stub only
 └── stage6_reporting/        # stub only
 notebooks/                  # not yet created — 01_data_exploration, 02_baseline_vs_models_norman,
                              # 03_baseline_vs_models_adamson, 04_calibration_analysis
 configs/
-└── training_hyperparameters.yaml   # created — stage1_data: + stage2_baselines: sections; add one per stage as it's built
+└── training_hyperparameters.yaml   # created — stage1_data:, stage2_baselines:, stage3a_gears: sections; add one per stage as it's built
 tests/
-├── conftest.py                # created — data_dir fixture (fixed ./data path, not tmp_path, so CI caching works)
-├── test_stage1_data.py        # created — unit tests + one @pytest.mark.integration real-download test
-└── test_stage2_baselines.py   # created — toy-data unit tests (exact arithmetic checked) + one integration test on the real split
+├── conftest.py                    # created — data_dir fixture (fixed ./data path, not tmp_path, so CI caching works)
+├── test_perturbation_conditions.py  # created — pure-logic unit tests, no heavy deps needed
+├── test_stage1_data.py            # created — unit tests + one @pytest.mark.integration real-download test
+├── test_stage2_baselines.py       # created — toy-data unit tests (exact arithmetic checked) + one integration test on the real split
+└── test_stage3a_gears.py          # created — fast RuntimeError-before-fit tests + one integration test (real minimal training run)
 environment.yml / requirements.txt   # created — base CPU env, Stages 1/2/3a/4/5/6
 environment-scgpt.yml                # created — GPU env, Stage 3b
 environment-geneformer.yml           # created — GPU env, Stage 3c
@@ -126,7 +133,7 @@ LICENSES.md                 # not yet created
 
 - Python 3.10, Conda env (`environment.yml`, name `perturb-bench`) + separate Docker image(s) for GPU stages (scGPT's flash-attention is CUDA-version-sensitive — keep it isolated).
 - `AnnData`/`scanpy` for all data structures. Core deps in `environment.yml` are pinned to match GEARS's own `requirements.txt` exactly (`numpy==1.26.4`, `pandas==2.2.2`, `scipy==1.14.1`, `scikit-learn==1.5.1`, `scanpy==1.10.2`, `networkx==3.3`, `tqdm==4.66.5`) — don't casually bump these without re-checking GEARS compatibility.
-- `cell-gears` (confirmed current PyPI name/version: `0.1.2`) for GEARS. Requires PyTorch Geometric installed first (`torch_geometric`; optional accelerated ops like `torch-scatter` need wheels matched to the exact torch build).
+- `cell-gears` (confirmed current PyPI name/version: `0.1.2`) for GEARS. Requires PyTorch Geometric installed first (`torch_geometric`; optional accelerated ops like `torch-scatter` need wheels matched to the exact torch build). The `GEARS` model class API (verified directly against `gears/gears.py`/`gears/inference.py`, not guessed): `GEARS(pert_data, device=..., weight_bias_track=...)` → `.model_initialize(hidden_size=...)` → `.train(epochs=..., lr=..., weight_decay=...)` → `.predict([[gene, ...], ...])`, which returns a dict keyed by `"_".join(genes)` (underscore-joined, gene names only — **not** the `"+"`-joined, `ctrl`-inclusive format `adata.obs['condition']` uses). `src/perturbation_conditions.py` + `src/stage3_models/gears_wrapper.py` handle that translation.
 - `scgpt` (from `github.com/bowang-lab/scGPT`) for scGPT fine-tuning — **must live in its own environment**, not `perturb-bench` (see Environment setup above for the `cell-gears` version conflict). Also pins `scanpy>=1.9.1,<2.0.0`, `scvi-tools>=0.16.0,<1.0`, `orbax<0.1.8`; needs `flash-attn` for the fast attention path (GPU/CUDA-build-specific).
 - `Geneformer` (git-lfs clone from Hugging Face, `ctheodoris/Geneformer`, then `pip install .` — not on PyPI; may require gated/credentialed HF access, confirm before use) for zero-shot in silico perturbation. Requires Python >=3.10; deps (`transformers==4.46`, `peft`, `ray`, `optuna`, etc.) are permissive enough to coexist with the base env's pins, but keep it in its own environment anyway for the same GPU-isolation reason as scGPT.
 - `scikit-learn` `Ridge` for the baseline.
@@ -140,7 +147,9 @@ LICENSES.md                 # not yet created
 - **Run and report both Norman (combinatorial) and Adamson (single-gene)** — a conclusion that differs between the "easy" and "hard" perturbation regime is a legitimate finding to publish, not a discrepancy to paper over.
 - **Every hyperparameter and random seed goes in `configs/`** — reproducibility by an independent party is a hard project requirement, not a nice-to-have, given the benchmarking-fragility literature this project is directly engaging with.
 - Metric definitions must match the source papers exactly (MSE@20DEG, Pearson of delta-from-control via t-test DEG selection) — don't substitute a "close enough" metric variant.
-- **Stage 2's baseline interface is the contract later stages should match**: `fit(adata: AnnData, train_conditions: list[str])` / `predict(condition: str) -> np.ndarray` (a per-gene mean expression profile, `n_genes` long). All three baselines share it — even `NoChangeBaseline`, which ignores `train_conditions` — specifically so Stage 4's evaluation loop can treat every baseline (and eventually GEARS/scGPT/Geneformer wrappers) uniformly. `RidgeBaseline` uses a multi-hot gene-identity encoding as its "perturbation embedding," a deliberate, documented simplification of the ESM-2-style embeddings BUILD_PLAN.md §5 mentions — not a hidden shortcut.
+- **Stage 2's baseline interface is the contract later stages should match**: `fit(adata: AnnData, train_conditions: list[str])` / `predict(condition: str) -> np.ndarray` (a per-gene mean expression profile, `n_genes` long). All three baselines share it — even `NoChangeBaseline`, which ignores `train_conditions` — specifically so Stage 4's evaluation loop can treat every baseline uniformly. `RidgeBaseline` uses a multi-hot gene-identity encoding as its "perturbation embedding," a deliberate, documented simplification of the ESM-2-style embeddings BUILD_PLAN.md §5 mentions — not a hidden shortcut.
+- **`GearsModel` (Stage 3a) deliberately does *not* match that exact signature**: `fit(pert_data)` takes the whole `PertData` object, not `(adata, train_conditions)`, because GEARS's model genuinely needs the graph-structured dataloaders `PertData.get_dataloader()` builds (GO similarity / gene co-expression graphs) — a bare `AnnData` can't provide that. `predict(condition) -> np.ndarray` still matches Stage 2's output shape, and `predict_many(conditions) -> dict[str, np.ndarray]` exists for the batched case (GEARS's own `predict()` is natively batched; calling it once per condition would rebuild a DataLoader every time). This is a real difference in what the model needs, not an inconsistency to paper over — Stage 4 will need to branch on it, not force a fake-uniform interface.
+- **GEARS's own hyperparameter defaults are used as-is** (`hidden_size=64, epochs=20, lr=1e-3, weight_decay=5e-4`) per BUILD_PLAN.md §6 Stage 3a ("default hyperparameters," not tuned). The CI/integration smoke test uses a separate, much smaller `stage3a_gears.smoke_test` config (`epochs=1, hidden_size=8`) purely to confirm the training loop runs — never conflate the two when reading results.
 
 ## Licensing checklist to keep in mind
 

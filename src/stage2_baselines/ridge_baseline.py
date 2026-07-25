@@ -19,9 +19,7 @@ import numpy as np
 from anndata import AnnData
 from sklearn.linear_model import Ridge
 
-
-def _perturbed_genes(condition: str) -> list[str]:
-    return [g for g in condition.split("+") if g != "ctrl"]
+from src.perturbation_conditions import perturbed_genes
 
 
 class RidgeBaseline:
@@ -34,7 +32,7 @@ class RidgeBaseline:
 
     def _encode(self, condition: str) -> np.ndarray:
         vec = np.zeros(len(self._gene_vocab), dtype=float)
-        for gene in _perturbed_genes(condition):
+        for gene in perturbed_genes(condition):
             if gene in self._gene_vocab:
                 vec[self._gene_vocab[gene]] = 1.0
         return vec
@@ -43,7 +41,7 @@ class RidgeBaseline:
         ctrl = adata[adata.obs["condition"] == "ctrl"]
         self._ctrl_mean = np.asarray(ctrl.X.mean(axis=0)).ravel()
 
-        genes = sorted({g for c in train_conditions for g in _perturbed_genes(c)})
+        genes = sorted({g for c in train_conditions for g in perturbed_genes(c)})
         self._gene_vocab = {gene: i for i, gene in enumerate(genes)}
 
         X, y = [], []

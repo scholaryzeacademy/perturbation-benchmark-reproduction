@@ -28,7 +28,14 @@ dependencies:
   - scanpy=1.10.2
   - networkx=3.3
   - tqdm=4.66.5
-  - pytorch=2.*
+  # Explicit `=cpu*` build-string pin, not just `cpuonly`: conda-forge's
+  # pytorch feedstock now also publishes CUDA builds under the same
+  # version, and channel resolution can pick a `cudaNNN_mkl` build even
+  # with `cpuonly` present (verified directly -- a plain `pytorch=2.*` +
+  # `cpuonly` resolved a `cuda129_mkl` build pulling in the full CUDA
+  # toolkit, ~4GB, and timed out downloading it). The `=cpu*` build match
+  # forces the actual CPU-only build (~295MB).
+  - pytorch=2.*=cpu*
   - cpuonly
   - matplotlib
   - seaborn

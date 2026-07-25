@@ -19,3 +19,22 @@ stage2_baselines:
   ridge:
     alpha: 1.0
     seed: 1
+
+stage3a_gears:
+  # GEARS's own documented library defaults (BUILD_PLAN.md Sec.6 Stage 3a:
+  # "train GEARS using its own documented training procedure and default
+  # hyperparameters" -- not tuned by this project). Verified directly against
+  # gears/gears.py's model_initialize()/train() signatures.
+  hidden_size: 64
+  epochs: 20
+  lr: 0.001
+  weight_decay: 0.0005
+  weight_bias_track: false
+  # Used ONLY by the CI/integration smoke test (BUILD_PLAN.md Sec.5: GEARS is
+  # smoke-tested in CI "on a small perturbation subset", unlike the
+  # foundation-model stages) -- confirms the training loop runs end-to-end,
+  # not meant to produce a usable trained model. Real results use the values
+  # above.
+  smoke_test:
+    hidden_size: 8
+    epochs: 1

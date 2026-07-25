@@ -27,15 +27,22 @@ jobs:
 
   # Runs every @pytest.mark.integration test -- real network calls against
   # GEARS's actual download/split path (BUILD_PLAN.md Sec.4: "a broken
-  # data-download step blocks everything downstream") and, as of Stage 2,
-  # fitting all three baselines against the real split. New stages just add
+  # data-download step blocks everything downstream"), fitting all three
+  # Stage 2 baselines against the real split, and, as of Stage 3a, a minimal
+  # (epochs=1, tiny hidden_size) real GEARS training run -- BUILD_PLAN.md
+  # Sec.5 explicitly calls for GEARS (unlike scGPT/Geneformer) to be
+  # smoke-tested in CI "on a small perturbation subset". New stages just add
   # their own integration-marked tests; this job picks them up automatically,
   # no edits needed here. Only Adamson (single-gene, smaller) runs on every
   # push/PR to keep CI fast and free-tier-compatible (BUILD_PLAN.md Sec.5);
   # Norman can be checked via workflow_dispatch on demand.
+  # timeout-minutes is a safety net, not an expected duration: GEARS's
+  # graph/GNN setup has unpredictable first-run cost, and this should fail
+  # loudly rather than silently burn CI minutes if something hangs.
   data-smoke-test:
     runs-on: ubuntu-latest
     needs: unit-tests
+    timeout-minutes: 20
     env:
       PERTDATA_TEST_DATASET: ${{ github.event.inputs.dataset || 'adamson' }}
     steps:
