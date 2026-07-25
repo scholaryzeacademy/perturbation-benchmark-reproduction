@@ -1,0 +1,47 @@
+# GPU environment for running Stage 3a's (GEARS) REAL training run fast on
+# a machine with an NVIDIA GPU. Developed/tested against an RTX 3090 (24GB,
+# Ampere, CUDA 12.x driver).
+#
+# Not used by CI or the base `perturb-bench` env: environment.yml is
+# deliberately pinned to a CPU-only pytorch build (see its own comments) so
+# CI/Docker's `cpu` target stays small and reproducible, and BUILD_PLAN.md
+# §5/§10 documents Stage 3a as CPU-feasible in principle. This file exists
+# purely so the real (non-smoke) run -- hidden_size=64, epochs=20 on the
+# full Norman/Adamson splits, see configs/training_hyperparameters.yaml --
+# can run in minutes instead of the ~15-17 hours it took on a laptop CPU
+# (measured directly: ~30 steps/min on an i7-10510U, projecting to that
+# range for 20 epochs over Adamson's ~50k-cell train split).
+#
+# Same core pins as environment.yml (matched to GEARS's own
+# requirements.txt) -- only the pytorch build differs.
+name: perturb-bench-gears-gpu
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip
+  - numpy=1.26.4
+  - pandas=2.2.2
+  - scipy=1.14.1
+  - scikit-learn=1.5.1
+  - scanpy=1.10.2
+  - networkx=3.3
+  - tqdm=4.66.5
+  - pytorch=2.*
+  # 12.1 matches this project's other GPU env (environment-scgpt.yml) and is
+  # broadly compatible with Ampere (RTX 30-series) and newer. Confirm
+  # `nvidia-smi`'s reported CUDA version is >= this before installing --
+  # if your driver is older, lower this to match.
+  - pytorch-cuda=12.1
+  - pyyaml
+  - pip:
+      - anndata
+      - cell-gears
+      - torch_geometric
+      # GEARS trains a GNN over a gene co-expression/GO graph. If you hit
+      # missing-op errors from torch_geometric, you need the optional
+      # accelerated extensions (torch-scatter/torch-sparse/torch-cluster)
+      # built against this exact torch+CUDA version -- see
+      # https://pytorch-geometric.readthedocs.io/en/latest/notes/installation.html

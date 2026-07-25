@@ -18,25 +18,41 @@ pytest tests/ -v
 # Stage 1 — download + split a dataset (writes into ./data)
 python -m src.stage1_data.cli --dataset adamson
 python -m src.stage1_data.cli --dataset norman
+
+# Stage 3a — REAL GEARS training run (GEARS's own default hyperparameters:
+# hidden_size=64, epochs=20 -- see configs/training_hyperparameters.yaml).
+# Distinct from tests/test_stage3a_gears.py's tiny smoke-test config.
+# Measured ~15-17 hours on a laptop CPU (i7-10510U) for Adamson -- use a
+# CUDA GPU instead (see environment-gears-gpu.yml / scripts/run_gears_gpu.sh,
+# tested against an RTX 3090):
+python -m src.stage3_models.train_gears --dataset adamson
+python -m src.stage3_models.train_gears --dataset norman
 ```
 
-Stages 2 and 3a have no CLI of their own by design — they're importable classes exercised via tests, not yet wired into an end-to-end runner:
+Stage 2 has no CLI of its own by design — it's importable classes exercised via tests, not yet wired into an end-to-end runner:
 - `src/stage2_baselines/` — `no_change.py`, `mean_baseline.py`, `ridge_baseline.py`: `fit(adata, train_conditions)` / `predict(condition)`, tested in `tests/test_stage2_baselines.py`.
-- `src/stage3_models/gears_wrapper.py` — `GearsModel`: `fit(pert_data)` / `predict(condition)` (also `save(path)`/`load(pert_data, path)`), tested in `tests/test_stage3a_gears.py`. Note the different `fit()` signature from Stage 2 — see "Working conventions" below for why.
 
-They'll get driven end-to-end once Stage 4 (metrics) or Stage 6 (reporting) exists to actually consume their predictions.
+It'll get driven end-to-end once Stage 4 (metrics) or Stage 6 (reporting) exists to actually consume its predictions.
+
+`src/stage3_models/gears_wrapper.py` — `GearsModel`: `fit(pert_data)` / `predict(condition)` (also `save(path)`/`load(pert_data, path)`), tested in `tests/test_stage3a_gears.py` (fast unit tests + a smoke-scale integration test) and driven for real by `src/stage3_models/train_gears.py` (see Commands above). Note `fit()`'s different signature from Stage 2 — see "Working conventions" below for why.
 
 All of the above assume the `perturb-bench` conda env is active (see Environment setup below) — `gears`/`torch_geometric` aren't installed outside it, so these commands will import-error in a bare system Python.
 
 ## Environment setup
 
-Three separate conda environments — do not merge them, see below for why.
+Separate conda environments — do not merge them, see below for why.
 
 ```
 # Base — Stages 1, 2, 3a, 4, 5, 6 (CPU; also what CI runs)
 conda env create -f environment.yml && conda activate perturb-bench
 # or, pip-only (CI / Docker):
 pip install -r requirements.txt
+
+# Stage 3a on a GPU machine (optional -- only for running train_gears.py's
+# real, non-smoke training run at practical speed; CI/the base env stay
+# CPU-only). Tested against an RTX 3090; see scripts/run_gears_gpu.sh for a
+# one-command wrapper.
+conda env create -f environment-gears-gpu.yml && conda activate perturb-bench-gears-gpu
 
 # Stage 3b — scGPT fine-tuning (GPU)
 conda env create -f environment-scgpt.yml && conda activate perturb-bench-scgpt
@@ -103,7 +119,7 @@ src/
 ├── perturbation_conditions.py    # created — shared 'GENE+ctrl'/'GENE1+GENE2' condition-string parsing (used by ridge_baseline.py and gears_wrapper.py)
 ├── stage1_data/              # created — load_data.py (PertData wrapper), cli.py
 ├── stage2_baselines/         # created — no_change.py, mean_baseline.py, ridge_baseline.py
-├── stage3_models/            # gears_wrapper.py created; scgpt_wrapper.py, geneformer_wrapper.py still to go
+├── stage3_models/            # gears_wrapper.py + train_gears.py created; scgpt_wrapper.py, geneformer_wrapper.py still to go
 ├── stage4_conventional_metrics/  # stub only
 ├── stage5_calibration/      # stub only
 └── stage6_reporting/        # stub only
@@ -111,6 +127,8 @@ notebooks/                  # not yet created — 01_data_exploration, 02_baseli
                              # 03_baseline_vs_models_adamson, 04_calibration_analysis
 configs/
 └── training_hyperparameters.yaml   # created — stage1_data:, stage2_baselines:, stage3a_gears: sections; add one per stage as it's built
+scripts/
+└── run_gears_gpu.sh          # created — one-command wrapper around train_gears.py for a GPU machine (conda-env-create-if-missing + run)
 tests/
 ├── conftest.py                    # created — data_dir fixture (fixed ./data path, not tmp_path, so CI caching works)
 ├── test_perturbation_conditions.py  # created — pure-logic unit tests, no heavy deps needed
@@ -118,6 +136,7 @@ tests/
 ├── test_stage2_baselines.py       # created — toy-data unit tests (exact arithmetic checked) + one integration test on the real split
 └── test_stage3a_gears.py          # created — fast RuntimeError-before-fit tests + one integration test (real minimal training run)
 environment.yml / requirements.txt   # created — base CPU env, Stages 1/2/3a/4/5/6
+environment-gears-gpu.yml            # created — optional GPU env for train_gears.py's real run at practical speed (not used by CI)
 environment-scgpt.yml                # created — GPU env, Stage 3b
 environment-geneformer.yml           # created — GPU env, Stage 3c
 Dockerfile / .dockerignore           # created — multi-stage: cpu / scgpt / geneformer targets
