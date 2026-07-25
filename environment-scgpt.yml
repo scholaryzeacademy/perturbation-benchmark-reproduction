@@ -1,0 +1,42 @@
+# GPU environment for Stage 3b — scGPT fine-tuning.
+#
+# Isolated from perturb-bench (environment.yml) because scGPT's pyproject.toml
+# pins `cell-gears<0.0.3`, which conflicts with the GEARS stage's own
+# `cell-gears` (0.1.2) — the two cannot be resolved into one environment.
+# Per BUILD_PLAN.md §5, this stage also needs a CUDA-matched torch/flash-attn
+# build, a second, independent reason to keep it separate from the CPU-only
+# base env.
+#
+# Verified directly against bowang-lab/scGPT's pyproject.toml (main branch) —
+# do not trust the README's older `pip install scgpt "flash-attn<1.0.5"`
+# instructions, which are stale relative to pyproject.toml's declared `[fa2]`
+# extra (flash-attn>=2.8.0, torch>=2.2.0).
+name: perturb-bench-scgpt
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip
+  - pytorch=2.*
+  # Match pytorch-cuda to the actual GPU instance's driver at provisioning
+  # time (BUILD_PLAN.md §10 Phase 0 — a T4/A10-class instance is the assumed
+  # target); 12.1 is a safe, broadly-supported default as of this writing.
+  - pytorch-cuda=12.1
+  - pip:
+      # Pulls in scGPT's own pinned stack, including cell-gears<0.0.3 — this
+      # is expected and fine, it's isolated in this env and unrelated to the
+      # GEARS stage's cell-gears 0.1.2 in perturb-bench.
+      - scgpt
+      # Optional fast-attention path. Needs nvcc matching the CUDA version
+      # above to compile from source unless a prebuilt wheel exists for your
+      # exact torch/CUDA/Python combo — expect a long build otherwise. scGPT
+      # works without it, just slower. Uncomment once the GPU instance is
+      # provisioned and `python -c "import torch; print(torch.version.cuda)"`
+      # is confirmed to match:
+      # - flash-attn>=2.8.0
+      # - einops>=0.6.0
+      # Optional training-run logging/visualization (scGPT's own README
+      # recommendation, not a hard requirement):
+      # - wandb

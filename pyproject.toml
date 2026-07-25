@@ -1,0 +1,5 @@
+[tool.pytest.ini_options]
+pythonpath = ["."]
+markers = [
+    "integration: exercises real network calls (e.g. GEARS dataset downloads); excluded from the fast unit-test CI job",
+]

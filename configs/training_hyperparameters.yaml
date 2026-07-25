@@ -1,0 +1,16 @@
+# Every hyperparameter and random seed used by the pipeline lives here,
+# organized by stage -- see BUILD_PLAN.md Sec.9 point 5 ("document every
+# hyperparameter and random seed... or it undermines the exact credibility
+# this project is meant to build"). Sections for later stages get added here
+# as those stages are implemented.
+
+stage1_data:
+  datasets: [norman, adamson]
+  data_dir: ./data
+  # GEARS's own documented split -- used as-is rather than re-splitting, to
+  # preserve comparability with published numbers (BUILD_PLAN.md Sec.4/Sec.6).
+  split: simulation
+  seed: 1
+  train_gene_set_size: 0.75
+  batch_size: 32
+  test_batch_size: 128

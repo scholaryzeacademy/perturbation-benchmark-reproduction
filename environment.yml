@@ -1,0 +1,48 @@
+# Base CPU environment for perturbation-benchmark-reproduction.
+#
+# Covers Stage 1 (data), Stage 2 (baselines), Stage 3a (GEARS), Stage 4
+# (conventional metrics), Stage 5 (calibration), Stage 6 (reporting) — the
+# stages BUILD_PLAN.md §5/§10 marks as CPU-feasible, and what CI smoke-tests.
+#
+# scGPT (Stage 3b) and Geneformer (Stage 3c) are deliberately NOT included
+# here. scGPT's own pyproject.toml pins `cell-gears<0.0.3`, which directly
+# conflicts with the GEARS stage's own `cell-gears` (currently 0.1.2) — the
+# two cannot be resolved into one environment. Per BUILD_PLAN.md §5 ("separate
+# Docker image for GPU stages; scGPT's flash-attention dependency is
+# CUDA-version-sensitive; isolate it"), each foundation-model stage gets its
+# own environment/Docker image, to be added alongside the Dockerfile.
+name: perturb-bench
+channels:
+  - conda-forge
+  - pytorch
+dependencies:
+  - python=3.10
+  - pip
+  # Pinned to match GEARS's own requirements.txt (snap-stanford/GEARS)
+  # exactly — GEARS is the one dependency in this env with hard version pins,
+  # so everything else is pinned to what it already expects.
+  - numpy=1.26.4
+  - pandas=2.2.2
+  - scipy=1.14.1
+  - scikit-learn=1.5.1
+  - scanpy=1.10.2
+  - networkx=3.3
+  - tqdm=4.66.5
+  - pytorch=2.*
+  - cpuonly
+  - matplotlib
+  - seaborn
+  - jupyterlab
+  - ipykernel
+  - pyyaml
+  - pytest
+  - pip:
+      - anndata
+      - cell-gears
+      - torch_geometric
+      - dcor
+      # GEARS trains a GNN over a gene co-expression/GO graph. If you hit
+      # missing-op errors from torch_geometric, you need the optional
+      # accelerated extensions (torch-scatter/torch-sparse/torch-cluster)
+      # built against this exact torch version — see
+      # https://pytorch-geometric.readthedocs.io/en/latest/notes/installation.html

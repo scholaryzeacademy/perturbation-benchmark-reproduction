@@ -1,0 +1,14 @@
+# Local Claude Code settings (machine-specific, not project config).
+.claude/
+
+# Downloaded/generated Perturb-seq data (GEARS's PertData writes here).
+data/
+
+__pycache__/
+*.pyc
+.pytest_cache/
+.ipynb_checkpoints/
+*.egg-info/
+
+.venv/
+.DS_Store

@@ -1,0 +1,15 @@
+.git
+.gitignore
+
+# Downloaded/generated Perturb-seq data (GEARS's PertData writes here) —
+# never bake this into an image layer.
+data/
+
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.pytest_cache/
+*.egg-info/
+
+.venv/
+.DS_Store

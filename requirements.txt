@@ -1,0 +1,34 @@
+# Pure-pip mirror of environment.yml's base (CPU) environment.
+#
+# Used by the GitHub Actions CI smoke test (BUILD_PLAN.md §5: "smoke-testing
+# the baseline + GEARS pipeline on a small perturbation subset") and any
+# Docker image that doesn't go through conda. Covers Stages 1, 2, 3a, 4, 5, 6.
+#
+# scGPT (Stage 3b) and Geneformer (Stage 3c) are intentionally excluded — see
+# the header comment in environment.yml for why (scGPT pins
+# `cell-gears<0.0.3`, incompatible with GEARS's actual 0.1.2). They belong in
+# their own isolated GPU environments/Docker images, run manually/on-demand
+# per BUILD_PLAN.md §5, not in this CI-facing file.
+
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+# Pinned to match GEARS's own requirements.txt (snap-stanford/GEARS) exactly.
+numpy==1.26.4
+pandas==2.2.2
+scipy==1.14.1
+scikit-learn==1.5.1
+scanpy==1.10.2
+networkx==3.3
+tqdm==4.66.5
+anndata
+torch
+torch_geometric
+cell-gears
+dcor
+
+matplotlib
+seaborn
+jupyterlab
+ipykernel
+pyyaml
+pytest

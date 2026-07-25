@@ -1,0 +1,59 @@
+# GPU environment for Stage 3c — Geneformer zero-shot in silico perturbation.
+#
+# Isolated from perturb-bench and perturb-bench-scgpt for the same GPU-
+# isolation reason as scGPT (BUILD_PLAN.md §5: "separate Docker image for GPU
+# stages"). Geneformer's own dependency pins (scanpy>=1.9, pandas>=2.0,
+# scikit-learn>=1.2, numpy>=1.23) don't hard-conflict with the base env, but
+# its stack (transformers==4.46, peft, ray, optuna, bitsandbytes) is heavy
+# and GPU-quantization-specific enough that keeping it separate avoids
+# destabilizing the other two environments.
+#
+# Verified directly against ctheodoris/Geneformer's requirements.txt and
+# setup.py on Hugging Face. Geneformer is NOT on PyPI — see the install note
+# at the bottom of this file.
+name: perturb-bench-geneformer
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+dependencies:
+  - python=3.10   # Geneformer requires Python >= 3.10
+  - git-lfs
+  - pip
+  - pytorch=2.*
+  # Match pytorch-cuda to the actual GPU instance's driver at provisioning
+  # time, same as environment-scgpt.yml.
+  - pytorch-cuda=12.1
+  - pip:
+      - anndata>=0.9
+      - bitsandbytes>=0.45.5
+      - datasets>=2.12
+      - hyperopt>=0.2
+      - loompy>=3.0
+      - matplotlib>=3.7
+      - numpy>=1.23
+      - optuna>=3.6
+      - optuna-integration>=3.6
+      - packaging>=23.0
+      - pandas>=2.0
+      - peft>=0.11.1
+      - pyarrow>=12.0
+      - pytz>=2023.0
+      - ray>=2.6
+      - scanpy>=1.9
+      - scikit-learn>=1.2
+      - scipy>=1.10
+      - seaborn>=0.12
+      - setuptools>=65.6
+      - statsmodels>=0.14
+      - tdigest>=0.5.2
+      - tensorboard>=2.15
+      - tqdm>=4.65
+      - transformers==4.46
+
+# Geneformer itself is not pip-installable by name — after creating this env:
+#   git lfs install
+#   git clone https://huggingface.co/ctheodoris/Geneformer
+#   cd Geneformer && pip install .
+# Confirm current Hugging Face access/gating terms before cloning — see
+# docs/BUILD_PLAN.md §11.
