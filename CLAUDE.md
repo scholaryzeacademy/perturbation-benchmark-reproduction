@@ -140,6 +140,7 @@ notebooks/                  # not yet created — 01_data_exploration, 02_baseli
 configs/
 └── training_hyperparameters.yaml   # created — stage1_data:, stage2_baselines:, stage3a_gears:, stage3b_scgpt: sections; add one per stage as it's built
 scripts/
+├── bootstrap_remote_gpu.sh       # created — single entry point for a fresh remote GPU box: installs git/conda if missing, clones the repo, runs both run_*_gpu.sh scripts below
 ├── run_gears_gpu.sh              # created — one-command wrapper around train_gears.py for a GPU machine (conda-env-create-if-missing + run)
 ├── run_scgpt_gpu.sh              # created — same, for train_scgpt.py (also fetches the pretrained checkpoint)
 └── download_scgpt_checkpoint.py  # created — gdown-based fetch of scGPT's 'whole-human' pretrained checkpoint (Google Drive-hosted, no plain URL)
