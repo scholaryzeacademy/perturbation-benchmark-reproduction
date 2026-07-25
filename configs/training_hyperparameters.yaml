@@ -14,3 +14,8 @@ stage1_data:
   train_gene_set_size: 0.75
   batch_size: 32
   test_batch_size: 128
+
+stage2_baselines:
+  ridge:
+    alpha: 1.0
+    seed: 1

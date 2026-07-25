@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-**Stage 1 (data acquisition) implemented; Stages 2–6 not yet started.** `docs/BUILD_PLAN.md` is the full project specification. All three conda environments, the multi-stage `Dockerfile`, and the CI workflow exist. `src/stage2_baselines/` through `src/stage6_reporting/` are empty package stubs (directory + `__init__.py` only) — that's intentional scaffolding matching `docs/BUILD_PLAN.md` §7, not partial implementation. Fill each in when that stage actually starts, and update this file's commands as you go.
+**Stages 1–2 (data acquisition, baselines) implemented; Stages 3–6 not yet started.** `docs/BUILD_PLAN.md` is the full project specification. All three conda environments, the multi-stage `Dockerfile`, and the CI workflow exist. `src/stage3_models/` through `src/stage6_reporting/` are empty package stubs (directory + `__init__.py` only) — that's intentional scaffolding matching `docs/BUILD_PLAN.md` §7, not partial implementation. Fill each in when that stage actually starts, and update this file's commands as you go.
 
 ## Commands
 
@@ -12,13 +12,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Run the fast unit tests (no network) — what CI's unit-tests job runs
 pytest tests/ -m "not integration" -v
 
-# Run everything including real GEARS-download integration tests
+# Run everything including real GEARS-download/fit integration tests
 pytest tests/ -v
 
 # Stage 1 — download + split a dataset (writes into ./data)
 python -m src.stage1_data.cli --dataset adamson
 python -m src.stage1_data.cli --dataset norman
 ```
+
+Stage 2 (`src/stage2_baselines/`) has no CLI of its own by design — `no_change.py`, `mean_baseline.py`, `ridge_baseline.py` are just importable `fit(adata, train_conditions)` / `predict(condition)` classes, exercised via `tests/test_stage2_baselines.py`. They'll get driven end-to-end once Stage 4 (metrics) or Stage 6 (reporting) exists to actually consume their predictions.
 
 All of the above assume the `perturb-bench` conda env is active (see Environment setup below) — `gears`/`torch_geometric` aren't installed outside it, so these commands will import-error in a bare system Python.
 
@@ -58,7 +60,7 @@ The `geneformer` target intentionally does not clone/install Geneformer at build
 
 Two jobs, both on `requirements.txt` (pip, not conda — matches the `cpu` Docker target):
 - **`unit-tests`** — fast, no network, runs `pytest -m "not integration"`.
-- **`data-smoke-test`** (depends on `unit-tests`) — actually invokes `python -m src.stage1_data.cli --dataset adamson` against the real GEARS download path on every push/PR (`./data` cached across runs by dataset name), since BUILD_PLAN.md §4 calls a broken download link the single failure point that blocks everything downstream. Norman is intentionally not run automatically (bigger, combinatorial) — trigger it via `workflow_dispatch` with `dataset: norman` when needed. Extend this workflow with baseline/GEARS-training smoke-testing once Stage 2/3a exist, per BUILD_PLAN.md §5's CI description.
+- **`data-smoke-test`** (depends on `unit-tests`) — runs `pytest tests/ -m integration -v` against real data: GEARS's actual download path (Stage 1) plus fitting all three baselines against the real split (Stage 2). `./data` is cached across runs by dataset name (the `data_dir` fixture in `tests/conftest.py` intentionally does *not* use pytest's `tmp_path`, so this cache actually hits). Dataset defaults to Adamson (smaller, single-gene) via the `PERTDATA_TEST_DATASET` env var, which both `test_stage1_data.py` and `test_stage2_baselines.py`'s integration tests read — trigger Norman via `workflow_dispatch` with `dataset: norman` when needed. New stages should just add their own `@pytest.mark.integration` tests; this job picks them up automatically, no `ci.yml` edits required.
 
 ## What this project is
 
@@ -95,7 +97,7 @@ Six sequential stages, each with a distinct owner discipline (see `docs/BUILD_PL
 ```
 src/
 ├── stage1_data/             # created — load_data.py (PertData wrapper), cli.py
-├── stage2_baselines/        # stub only — no_change.py, mean_baseline.py, ridge_baseline.py go here
+├── stage2_baselines/        # created — no_change.py, mean_baseline.py, ridge_baseline.py
 ├── stage3_models/           # stub only — gears_wrapper.py, scgpt_wrapper.py, geneformer_wrapper.py go here
 ├── stage4_conventional_metrics/  # stub only
 ├── stage5_calibration/      # stub only
@@ -103,14 +105,16 @@ src/
 notebooks/                  # not yet created — 01_data_exploration, 02_baseline_vs_models_norman,
                              # 03_baseline_vs_models_adamson, 04_calibration_analysis
 configs/
-└── training_hyperparameters.yaml   # created — has a stage1_data: section; add a section per stage as it's built
+└── training_hyperparameters.yaml   # created — stage1_data: + stage2_baselines: sections; add one per stage as it's built
 tests/
-└── test_stage1_data.py       # created — unit tests + one @pytest.mark.integration real-download test
+├── conftest.py                # created — data_dir fixture (fixed ./data path, not tmp_path, so CI caching works)
+├── test_stage1_data.py        # created — unit tests + one @pytest.mark.integration real-download test
+└── test_stage2_baselines.py   # created — toy-data unit tests (exact arithmetic checked) + one integration test on the real split
 environment.yml / requirements.txt   # created — base CPU env, Stages 1/2/3a/4/5/6
 environment-scgpt.yml                # created — GPU env, Stage 3b
 environment-geneformer.yml           # created — GPU env, Stage 3c
 Dockerfile / .dockerignore           # created — multi-stage: cpu / scgpt / geneformer targets
-.github/workflows/ci.yml             # created — unit-tests job + data-smoke-test job (Adamson, cached, workflow_dispatch for Norman)
+.github/workflows/ci.yml             # created — unit-tests job + data-smoke-test job (runs all @pytest.mark.integration tests)
 pyproject.toml                       # created — pytest config only (pythonpath, integration marker); no packaging
 .gitignore                           # created
 reports/final_writeup/      # not yet created
@@ -136,6 +140,7 @@ LICENSES.md                 # not yet created
 - **Run and report both Norman (combinatorial) and Adamson (single-gene)** — a conclusion that differs between the "easy" and "hard" perturbation regime is a legitimate finding to publish, not a discrepancy to paper over.
 - **Every hyperparameter and random seed goes in `configs/`** — reproducibility by an independent party is a hard project requirement, not a nice-to-have, given the benchmarking-fragility literature this project is directly engaging with.
 - Metric definitions must match the source papers exactly (MSE@20DEG, Pearson of delta-from-control via t-test DEG selection) — don't substitute a "close enough" metric variant.
+- **Stage 2's baseline interface is the contract later stages should match**: `fit(adata: AnnData, train_conditions: list[str])` / `predict(condition: str) -> np.ndarray` (a per-gene mean expression profile, `n_genes` long). All three baselines share it — even `NoChangeBaseline`, which ignores `train_conditions` — specifically so Stage 4's evaluation loop can treat every baseline (and eventually GEARS/scGPT/Geneformer wrappers) uniformly. `RidgeBaseline` uses a multi-hot gene-identity encoding as its "perturbation embedding," a deliberate, documented simplification of the ESM-2-style embeddings BUILD_PLAN.md §5 mentions — not a hidden shortcut.
 
 ## Licensing checklist to keep in mind
 
