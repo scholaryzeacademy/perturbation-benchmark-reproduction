@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-**Stages 1–3a (data acquisition, baselines, GEARS) implemented; Stages 3b–6 not yet started.** `docs/BUILD_PLAN.md` is the full project specification. All three conda environments, the multi-stage `Dockerfile`, and the CI workflow exist. `src/stage3_models/` still has `scgpt_wrapper.py`/`geneformer_wrapper.py` to go; `src/stage4_conventional_metrics/` through `src/stage6_reporting/` are empty package stubs (directory + `__init__.py` only) — that's intentional scaffolding matching `docs/BUILD_PLAN.md` §7, not partial implementation. Fill each in when that stage actually starts, and update this file's commands as you go.
+**Stages 1–3a (data acquisition, baselines, GEARS) implemented and CI-verified; Stage 3b (scGPT) code exists but is UNTESTED end-to-end; Stages 3c–6 not yet started.** `docs/BUILD_PLAN.md` is the full project specification. All conda environments, the multi-stage `Dockerfile`, and the CI workflow exist. `src/stage3_models/train_scgpt.py` is a close port of `bowang-lab/scGPT`'s own `Tutorial_Perturbation.ipynb`, written without a GPU capable of running it available at the time — treat its first real run as the actual test, not a known-working script (unlike `train_gears.py`, which has been run for real). `src/stage3_models/geneformer_wrapper.py` still doesn't exist; `src/stage4_conventional_metrics/` through `src/stage6_reporting/` are empty package stubs (directory + `__init__.py` only) — that's intentional scaffolding matching `docs/BUILD_PLAN.md` §7, not partial implementation. Fill each in when that stage actually starts, and update this file's commands as you go.
 
 ## Commands
 
@@ -27,6 +27,13 @@ python -m src.stage1_data.cli --dataset norman
 # tested against an RTX 3090):
 python -m src.stage3_models.train_gears --dataset adamson
 python -m src.stage3_models.train_gears --dataset norman
+
+# Stage 3b — scGPT fine-tuning (needs the perturb-bench-scgpt env, a GPU,
+# and the pretrained checkpoint -- see Environment setup below). UNTESTED
+# end-to-end as of this writing:
+python scripts/download_scgpt_checkpoint.py
+python -m src.stage3_models.train_scgpt --dataset adamson
+python -m src.stage3_models.train_scgpt --dataset norman
 ```
 
 Stage 2 has no CLI of its own by design — it's importable classes exercised via tests, not yet wired into an end-to-end runner:
@@ -36,7 +43,9 @@ It'll get driven end-to-end once Stage 4 (metrics) or Stage 6 (reporting) exists
 
 `src/stage3_models/gears_wrapper.py` — `GearsModel`: `fit(pert_data)` / `predict(condition)` (also `save(path)`/`load(pert_data, path)`), tested in `tests/test_stage3a_gears.py` (fast unit tests + a smoke-scale integration test) and driven for real by `src/stage3_models/train_gears.py` (see Commands above). Note `fit()`'s different signature from Stage 2 — see "Working conventions" below for why.
 
-All of the above assume the `perturb-bench` conda env is active (see Environment setup below) — `gears`/`torch_geometric` aren't installed outside it, so these commands will import-error in a bare system Python.
+`src/stage3_models/train_scgpt.py` is deliberately **not** a `fit()`/`predict()` class like `GearsModel` — scGPT's own documented fine-tuning procedure (`Tutorial_Perturbation.ipynb`) is a linear training script (custom train loop, AMP, early stopping, its own eval/plotting), not something that fits Stage 2's baseline contract without inventing an interface scGPT itself doesn't have. It's a script, run via the CLI above, same shape as `train_gears.py` — see "Working conventions" below.
+
+All of the above assume the right conda env is active for the stage (see Environment setup below) — e.g. `gears`/`torch_geometric` aren't installed outside `perturb-bench`, `scgpt` isn't installed outside `perturb-bench-scgpt`, so these commands will import-error in the wrong env or a bare system Python.
 
 ## Environment setup
 
@@ -54,7 +63,10 @@ pip install -r requirements.txt
 # one-command wrapper.
 conda env create -f environment-gears-gpu.yml && conda activate perturb-bench-gears-gpu
 
-# Stage 3b — scGPT fine-tuning (GPU)
+# Stage 3b — scGPT fine-tuning (GPU; tested against an RTX 3090, Ampere).
+# flash-attn is enabled by default in this env file (Ampere+ supports it) --
+# see scripts/run_scgpt_gpu.sh for a one-command wrapper that also fetches
+# the pretrained checkpoint via scripts/download_scgpt_checkpoint.py.
 conda env create -f environment-scgpt.yml && conda activate perturb-bench-scgpt
 
 # Stage 3c — Geneformer zero-shot in silico perturbation (GPU)
@@ -119,16 +131,18 @@ src/
 ├── perturbation_conditions.py    # created — shared 'GENE+ctrl'/'GENE1+GENE2' condition-string parsing (used by ridge_baseline.py and gears_wrapper.py)
 ├── stage1_data/              # created — load_data.py (PertData wrapper), cli.py
 ├── stage2_baselines/         # created — no_change.py, mean_baseline.py, ridge_baseline.py
-├── stage3_models/            # gears_wrapper.py + train_gears.py created; scgpt_wrapper.py, geneformer_wrapper.py still to go
+├── stage3_models/            # gears_wrapper.py + train_gears.py + train_scgpt.py created; geneformer_wrapper.py still to go
 ├── stage4_conventional_metrics/  # stub only
 ├── stage5_calibration/      # stub only
 └── stage6_reporting/        # stub only
 notebooks/                  # not yet created — 01_data_exploration, 02_baseline_vs_models_norman,
                              # 03_baseline_vs_models_adamson, 04_calibration_analysis
 configs/
-└── training_hyperparameters.yaml   # created — stage1_data:, stage2_baselines:, stage3a_gears: sections; add one per stage as it's built
+└── training_hyperparameters.yaml   # created — stage1_data:, stage2_baselines:, stage3a_gears:, stage3b_scgpt: sections; add one per stage as it's built
 scripts/
-└── run_gears_gpu.sh          # created — one-command wrapper around train_gears.py for a GPU machine (conda-env-create-if-missing + run)
+├── run_gears_gpu.sh              # created — one-command wrapper around train_gears.py for a GPU machine (conda-env-create-if-missing + run)
+├── run_scgpt_gpu.sh              # created — same, for train_scgpt.py (also fetches the pretrained checkpoint)
+└── download_scgpt_checkpoint.py  # created — gdown-based fetch of scGPT's 'whole-human' pretrained checkpoint (Google Drive-hosted, no plain URL)
 tests/
 ├── conftest.py                    # created — data_dir fixture (fixed ./data path, not tmp_path, so CI caching works)
 ├── test_perturbation_conditions.py  # created — pure-logic unit tests, no heavy deps needed
@@ -139,6 +153,8 @@ environment.yml / requirements.txt   # created — base CPU env, Stages 1/2/3a/4
 environment-gears-gpu.yml            # created — optional GPU env for train_gears.py's real run at practical speed (not used by CI)
 environment-scgpt.yml                # created — GPU env, Stage 3b
 environment-geneformer.yml           # created — GPU env, Stage 3c
+checkpoints/, save/, data_scgpt/     # gitignored — scGPT pretrained checkpoint, fine-tuning run outputs, and its own PertData cache (kept
+                                      # separate from ./data since perturb-bench-scgpt pins an older, unverified-compatible cell-gears)
 Dockerfile / .dockerignore           # created — multi-stage: cpu / scgpt / geneformer targets
 .github/workflows/ci.yml             # created — unit-tests job + data-smoke-test job (runs all @pytest.mark.integration tests)
 pyproject.toml                       # created — pytest config only (pythonpath, integration marker); no packaging
@@ -153,7 +169,7 @@ LICENSES.md                 # not yet created
 - Python 3.10, Conda env (`environment.yml`, name `perturb-bench`) + separate Docker image(s) for GPU stages (scGPT's flash-attention is CUDA-version-sensitive — keep it isolated).
 - `AnnData`/`scanpy` for all data structures. Core deps in `environment.yml` are pinned to match GEARS's own `requirements.txt` exactly (`numpy==1.26.4`, `pandas==2.2.2`, `scipy==1.14.1`, `scikit-learn==1.5.1`, `scanpy==1.10.2`, `networkx==3.3`, `tqdm==4.66.5`) — don't casually bump these without re-checking GEARS compatibility.
 - `cell-gears` (confirmed current PyPI name/version: `0.1.2`) for GEARS. Requires PyTorch Geometric installed first (`torch_geometric`; optional accelerated ops like `torch-scatter` need wheels matched to the exact torch build). The `GEARS` model class API (verified directly against `gears/gears.py`/`gears/inference.py`, not guessed): `GEARS(pert_data, device=..., weight_bias_track=...)` → `.model_initialize(hidden_size=...)` → `.train(epochs=..., lr=..., weight_decay=...)` → `.predict([[gene, ...], ...])`, which returns a dict keyed by `"_".join(genes)` (underscore-joined, gene names only — **not** the `"+"`-joined, `ctrl`-inclusive format `adata.obs['condition']` uses). `src/perturbation_conditions.py` + `src/stage3_models/gears_wrapper.py` handle that translation.
-- `scgpt` (from `github.com/bowang-lab/scGPT`) for scGPT fine-tuning — **must live in its own environment**, not `perturb-bench` (see Environment setup above for the `cell-gears` version conflict). Also pins `scanpy>=1.9.1,<2.0.0`, `scvi-tools>=0.16.0,<1.0`, `orbax<0.1.8`; needs `flash-attn` for the fast attention path (GPU/CUDA-build-specific).
+- `scgpt` (from `github.com/bowang-lab/scGPT`) for scGPT fine-tuning — **must live in its own environment**, not `perturb-bench` (see Environment setup above for the `cell-gears` version conflict). Also pins `scanpy>=1.9.1,<2.0.0`, `scvi-tools>=0.16.0,<1.0`, `orbax<0.1.8`; `flash-attn` (enabled in `environment-scgpt.yml`, Ampere+ target) is needed for the fast attention path (GPU/CUDA-build-specific) that `configs/training_hyperparameters.yaml`'s `stage3b_scgpt.use_fast_transformer: true` turns on. `src/stage3_models/train_scgpt.py`'s data loading / model / train / eval logic (verified directly against `bowang-lab/scGPT`'s own `tutorials/Tutorial_Perturbation.ipynb`, not guessed) uses the *pretrained* `whole-human` checkpoint (`scripts/download_scgpt_checkpoint.py`, Google-Drive-hosted) whose `args.json` overrides the config's `embsize`/`d_hid`/`nlayers`/`nhead`/`n_layers_cls` fields at load time — those config values only apply if you deliberately train from scratch instead.
 - `Geneformer` (git-lfs clone from Hugging Face, `ctheodoris/Geneformer`, then `pip install .` — not on PyPI; may require gated/credentialed HF access, confirm before use) for zero-shot in silico perturbation. Requires Python >=3.10; deps (`transformers==4.46`, `peft`, `ray`, `optuna`, etc.) are permissive enough to coexist with the base env's pins, but keep it in its own environment anyway for the same GPU-isolation reason as scGPT.
 - `scikit-learn` `Ridge` for the baseline.
 - GitHub Actions CI smoke-tests only the baseline + GEARS pipeline on a small subset (installs from `requirements.txt`) — foundation-model fine-tuning is too heavy for CI and is run manually/on-demand.
@@ -169,6 +185,8 @@ LICENSES.md                 # not yet created
 - **Stage 2's baseline interface is the contract later stages should match**: `fit(adata: AnnData, train_conditions: list[str])` / `predict(condition: str) -> np.ndarray` (a per-gene mean expression profile, `n_genes` long). All three baselines share it — even `NoChangeBaseline`, which ignores `train_conditions` — specifically so Stage 4's evaluation loop can treat every baseline uniformly. `RidgeBaseline` uses a multi-hot gene-identity encoding as its "perturbation embedding," a deliberate, documented simplification of the ESM-2-style embeddings BUILD_PLAN.md §5 mentions — not a hidden shortcut.
 - **`GearsModel` (Stage 3a) deliberately does *not* match that exact signature**: `fit(pert_data)` takes the whole `PertData` object, not `(adata, train_conditions)`, because GEARS's model genuinely needs the graph-structured dataloaders `PertData.get_dataloader()` builds (GO similarity / gene co-expression graphs) — a bare `AnnData` can't provide that. `predict(condition) -> np.ndarray` still matches Stage 2's output shape, and `predict_many(conditions) -> dict[str, np.ndarray]` exists for the batched case (GEARS's own `predict()` is natively batched; calling it once per condition would rebuild a DataLoader every time). This is a real difference in what the model needs, not an inconsistency to paper over — Stage 4 will need to branch on it, not force a fake-uniform interface.
 - **GEARS's own hyperparameter defaults are used as-is** (`hidden_size=64, epochs=20, lr=1e-3, weight_decay=5e-4`) per BUILD_PLAN.md §6 Stage 3a ("default hyperparameters," not tuned). The CI/integration smoke test uses a separate, much smaller `stage3a_gears.smoke_test` config (`epochs=1, hidden_size=8`) purely to confirm the training loop runs — never conflate the two when reading results.
+- **`train_gears.py`'s real (non-smoke) run needs the same memory care as the smoke test did before it was fixed**: `PertData.load()` builds one graph per single cell for the *entire* dataset regardless of hyperparameters, and this is genuinely slow on CPU too — measured ~15-17 hours projected for Adamson's 20 epochs on a laptop CPU (i7-10510U). `environment-gears-gpu.yml` / `scripts/run_gears_gpu.sh` exist to run this on a separate CUDA GPU machine instead (target hardware: an RTX 3090) — as of this writing that hasn't actually been run yet, so treat it the same as `train_scgpt.py` below: unverified until it's actually been executed once.
+- **`train_scgpt.py` is UNTESTED end-to-end** (written by porting `bowang-lab/scGPT`'s own tutorial without a GPU capable of running flash-attn/holding the pretrained checkpoint available at the time). Don't treat it as equivalent in reliability to `train_gears.py` — report back what actually happens on the first real run (RTX 3090) rather than assuming it works, and update this note once it has actually run successfully.
 
 ## Licensing checklist to keep in mind
 

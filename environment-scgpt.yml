@@ -11,6 +11,14 @@
 # do not trust the README's older `pip install scgpt "flash-attn<1.0.5"`
 # instructions, which are stale relative to pyproject.toml's declared `[fa2]`
 # extra (flash-attn>=2.8.0, torch>=2.2.0).
+#
+# Target GPU for src/stage3_models/train_scgpt.py is an RTX 3090 (24GB,
+# Ampere, compute capability 8.6) -- flash-attn>=2.8.0 fully supports Ampere,
+# so it's enabled by default below (unlike a Pascal/Turing card, where it
+# wouldn't install/run at all). If your GPU is older than Turing (compute
+# capability < 7.5), comment the flash-attn/einops lines back out and set
+# use_fast_transformer: false in configs/training_hyperparameters.yaml's
+# stage3b_scgpt section -- scGPT falls back to a slower vanilla-attention path.
 name: perturb-bench-scgpt
 channels:
   - pytorch
@@ -20,23 +28,25 @@ dependencies:
   - python=3.10
   - pip
   - pytorch=2.*
-  # Match pytorch-cuda to the actual GPU instance's driver at provisioning
-  # time (BUILD_PLAN.md §10 Phase 0 — a T4/A10-class instance is the assumed
-  # target); 12.1 is a safe, broadly-supported default as of this writing.
+  # Match pytorch-cuda to the actual GPU's driver if it differs; 12.1 is
+  # broadly compatible with Ampere (RTX 30-series) and newer.
   - pytorch-cuda=12.1
+  - pyyaml
   - pip:
       # Pulls in scGPT's own pinned stack, including cell-gears<0.0.3 — this
       # is expected and fine, it's isolated in this env and unrelated to the
       # GEARS stage's cell-gears 0.1.2 in perturb-bench.
       - scgpt
-      # Optional fast-attention path. Needs nvcc matching the CUDA version
-      # above to compile from source unless a prebuilt wheel exists for your
-      # exact torch/CUDA/Python combo — expect a long build otherwise. scGPT
-      # works without it, just slower. Uncomment once the GPU instance is
-      # provisioned and `python -c "import torch; print(torch.version.cuda)"`
-      # is confirmed to match:
-      # - flash-attn>=2.8.0
-      # - einops>=0.6.0
+      # Fast-attention path (Ampere+; see note above). Needs nvcc matching
+      # the CUDA version above to compile from source unless a prebuilt
+      # wheel exists for your exact torch/CUDA/Python combo — expect a long
+      # build (10-30+ min) otherwise, this is normal, not a hang.
+      - flash-attn>=2.8.0
+      - einops>=0.6.0
+      # Downloads the pretrained scGPT checkpoint from its Google Drive
+      # folder (see scripts/download_scgpt_checkpoint.py) — scGPT's weights
+      # aren't distributed any other way as of this writing.
+      - gdown
       # Optional training-run logging/visualization (scGPT's own README
       # recommendation, not a hard requirement):
       # - wandb

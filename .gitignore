@@ -3,6 +3,12 @@
 
 # Downloaded/generated Perturb-seq data (GEARS's PertData writes here).
 data/
+data_scgpt/
+
+# Pretrained scGPT checkpoint (scripts/download_scgpt_checkpoint.py) and
+# fine-tuning run outputs (src/stage3_models/train_scgpt.py).
+checkpoints/
+save/
 
 __pycache__/
 *.pyc
