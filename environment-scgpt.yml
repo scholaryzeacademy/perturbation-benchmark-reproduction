@@ -12,13 +12,24 @@
 # instructions, which are stale relative to pyproject.toml's declared `[fa2]`
 # extra (flash-attn>=2.8.0, torch>=2.2.0).
 #
-# Target GPU for src/stage3_models/train_scgpt.py is an RTX 3090 (24GB,
-# Ampere, compute capability 8.6) -- flash-attn>=2.8.0 fully supports Ampere,
-# so it's enabled by default below (unlike a Pascal/Turing card, where it
-# wouldn't install/run at all). If your GPU is older than Turing (compute
-# capability < 7.5), comment the flash-attn/einops lines back out and set
-# use_fast_transformer: false in configs/training_hyperparameters.yaml's
-# stage3b_scgpt section -- scGPT falls back to a slower vanilla-attention path.
+# Target GPU for src/stage3_models/train_scgpt.py is Ampere+ (tested against
+# an RTX 3090 24GB and an RTX 3060 12GB, both compute capability 8.6) --
+# flash-attn>=2.8.0 fully supports Ampere (unlike a Pascal/Turing card, where
+# it wouldn't install/run at all). If your GPU is older than Turing (compute
+# capability < 7.5), skip the flash-attn install step in
+# scripts/run_scgpt_gpu.sh entirely and set use_fast_transformer: false in
+# configs/training_hyperparameters.yaml's stage3b_scgpt section -- scGPT
+# falls back to a slower vanilla-attention path.
+#
+# flash-attn is intentionally NOT in the pip list below -- confirmed by a
+# real failure: flash-attn's setup.py does `import torch` at build time to
+# detect the CUDA version, but pip's build isolation (on by default) builds
+# each package in a throwaway venv that can't see this env's already-
+# installed torch, so that import fails ("ModuleNotFoundError: No module
+# named 'torch'") no matter how early torch appears in this same dependency
+# list. Fix is `pip install flash-attn --no-build-isolation` run as a
+# separate step *after* the env (with torch) already exists --
+# scripts/run_scgpt_gpu.sh does this automatically.
 name: perturb-bench-scgpt
 channels:
   - pytorch
@@ -32,16 +43,14 @@ dependencies:
   # broadly compatible with Ampere (RTX 30-series) and newer.
   - pytorch-cuda=12.1
   - pyyaml
+  # Speeds up (and makes more reliable) flash-attn's from-source compile,
+  # which scripts/run_scgpt_gpu.sh triggers after this env is created.
+  - ninja
   - pip:
       # Pulls in scGPT's own pinned stack, including cell-gears<0.0.3 — this
       # is expected and fine, it's isolated in this env and unrelated to the
       # GEARS stage's cell-gears 0.1.2 in perturb-bench.
       - scgpt
-      # Fast-attention path (Ampere+; see note above). Needs nvcc matching
-      # the CUDA version above to compile from source unless a prebuilt
-      # wheel exists for your exact torch/CUDA/Python combo — expect a long
-      # build (10-30+ min) otherwise, this is normal, not a hang.
-      - flash-attn>=2.8.0
       - einops>=0.6.0
       # Downloads the pretrained scGPT checkpoint from its Google Drive
       # folder (see scripts/download_scgpt_checkpoint.py) — scGPT's weights
