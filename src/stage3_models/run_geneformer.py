@@ -106,6 +106,7 @@ def main() -> None:
     print(f"=== {len(test_conditions)} test conditions, running in silico perturbation for each ===", flush=True)
 
     all_stats = []
+    succeeded_this_run = set()
     skipped = []
     for i, condition in enumerate(test_conditions):
         genes = perturbed_genes(condition)
@@ -177,31 +178,67 @@ def main() -> None:
 
         df["condition"] = condition
         all_stats.append(df)
+        succeeded_this_run.add(condition)
         print(
             f"[{i + 1}/{len(test_conditions)}] {condition} ({ensembl_ids}) "
             f"done in {time.time() - t0:.1f}s",
             flush=True,
         )
 
-    if skipped:
-        skipped_df = pd.DataFrame(skipped)
-        skipped_path = f"{output_dir}/{args.dataset}_geneformer_skipped_conditions.csv"
+    # Merge with any pre-existing combined/skipped CSVs from a prior run
+    # rather than overwriting them outright -- a common real usage pattern
+    # is re-running just a --conditions subset (e.g. retrying conditions
+    # that failed on GPU OOM last time), and a previous version of this
+    # script clobbered a prior run's full results down to just the subset
+    # just re-run (confirmed by hitting it for real: a 12-condition Adamson
+    # combined CSV was reduced to 9 rows' worth of conditions after
+    # re-running the other 9 -- recovered only because per-condition
+    # isp_stats/<prefix>/ subdirectories from the earlier run were still on
+    # disk and could be manually reconstructed). Only rows for conditions
+    # this run actually produced fresh *successful* output for are replaced
+    # -- a condition that was already successful in a prior run and happens
+    # to fail on a re-run keeps its old good data rather than losing it.
+    test_conditions_set = set(test_conditions)
+
+    skipped_path = f"{output_dir}/{args.dataset}_geneformer_skipped_conditions.csv"
+    skipped_df = pd.DataFrame(skipped, columns=["condition", "ensembl_ids", "error"])
+    if Path(skipped_path).exists():
+        existing_skipped = pd.read_csv(skipped_path)
+        existing_skipped = existing_skipped[~existing_skipped["condition"].isin(test_conditions_set)]
+        skipped_df = pd.concat([existing_skipped, skipped_df], ignore_index=True)
+
+    if not skipped_df.empty:
         skipped_df.to_csv(skipped_path, index=False)
         print(
-            f"=== {len(skipped)}/{len(test_conditions)} condition(s) skipped after a per-condition "
-            f"failure -- see {skipped_path} ===",
+            f"=== {len(skipped)}/{len(test_conditions)} condition(s) skipped this run after a "
+            f"per-condition failure -- {len(skipped_df)} total skipped condition(s) now recorded "
+            f"in {skipped_path} ===",
             flush=True,
         )
+    elif Path(skipped_path).exists():
+        # Every condition that was previously skipped and is in scope of
+        # this run now succeeded -- the file would otherwise be stale.
+        Path(skipped_path).unlink()
 
     if not all_stats:
         raise RuntimeError(
             f"All {len(test_conditions)} condition(s) failed -- see the skipped-conditions log above."
         )
 
-    combined = pd.concat(all_stats, ignore_index=True)
+    new_combined = pd.concat(all_stats, ignore_index=True)
     combined_path = f"{output_dir}/{args.dataset}_geneformer_cosine_shift.csv"
+    if Path(combined_path).exists():
+        existing_combined = pd.read_csv(combined_path)
+        existing_combined = existing_combined[~existing_combined["condition"].isin(succeeded_this_run)]
+        combined = pd.concat([existing_combined, new_combined], ignore_index=True)
+    else:
+        combined = new_combined
     combined.to_csv(combined_path, index=False)
-    print(f"=== Saved combined cosine-shift results to {combined_path} ===", flush=True)
+    print(
+        f"=== Saved combined cosine-shift results to {combined_path} "
+        f"({combined['condition'].nunique()} total condition(s)) ===",
+        flush=True,
+    )
     print("=== DONE ===", flush=True)
 
 
