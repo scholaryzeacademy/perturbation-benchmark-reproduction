@@ -187,6 +187,69 @@ def run_in_silico_perturbation(
     isp.perturb_data(model_directory, tokenized_data_path, output_directory, output_prefix)
 
 
+def _isp_aggregate_grouped_perturb_fixed(cos_sims_df, dict_list, genes_perturbed):
+    """Drop-in replacement for
+    geneformer.in_silico_perturber_stats.isp_aggregate_grouped_perturb that
+    fixes a real bug in the installed library: for a multi-gene group (e.g.
+    one of Norman's 2-gene combos), Gene_name is a tuple like
+    ('CREB1', 'DAD1'), and upstream's `df["Gene"] = symbol` lets pandas try
+    to broadcast that tuple *elementwise* across the per-cell rows, raising
+    `ValueError: Length of values (2) does not match length of index (N)`
+    for any N != 2. Confirmed via a synthetic 2-gene repro (2026-07-30) --
+    Adamson's real test split has no combo conditions to catch this
+    natively, but every one of Norman's real combo_seen0/1/2 conditions
+    would hit this exact crash in compute_perturbation_stats otherwise.
+
+    Everything here is copied unchanged from the installed
+    isp_aggregate_grouped_perturb (verified against the actual installed
+    source, not guessed) except the final assignment line, which wraps
+    symbol in a list so pandas assigns it as one repeated scalar per row
+    instead of trying to unpack it. This is a no-op for the single-gene
+    case (where symbol is already a plain string) -- `[symbol] * len(df)`
+    and pandas's own scalar broadcast produce an identical column -- so
+    this replacement is safe to apply unconditionally, not just for
+    multi-gene groups.
+    """
+    names = ["Cosine_sim", "Gene"]
+    cos_sims_full_dfs = []
+    if isinstance(genes_perturbed, list):
+        if len(genes_perturbed) > 1:
+            gene_ids_df = cos_sims_df.loc[
+                np.isin(
+                    [set(idx) for idx in cos_sims_df["Ensembl_ID"]],
+                    set(genes_perturbed),
+                ),
+                :,
+            ]
+        else:
+            gene_ids_df = cos_sims_df.loc[
+                np.isin(cos_sims_df["Ensembl_ID"], genes_perturbed), :
+            ]
+    else:
+        raise ValueError(
+            "aggregate_data is for perturbation of single gene or single group of genes. "
+            "genes_to_perturb should be formatted as list."
+        )
+
+    if gene_ids_df.empty:
+        raise ValueError("genes_to_perturb not found in data.")
+
+    tokens = gene_ids_df["Gene"]
+    symbols = gene_ids_df["Gene_name"]
+
+    for token, symbol in zip(tokens, symbols):
+        cos_shift_data = []
+        for dict_i in dict_list:
+            cos_shift_data += dict_i.get((token, "cell_emb"), [])
+
+        df = pd.DataFrame(columns=names)
+        df["Cosine_sim"] = cos_shift_data
+        df["Gene"] = [symbol] * len(df)
+        cos_sims_full_dfs.append(df)
+
+    return pd.concat(cos_sims_full_dfs)
+
+
 def compute_perturbation_stats(
     input_directory: str,
     output_directory: str,
@@ -204,8 +267,19 @@ def compute_perturbation_stats(
     Returns that CSV re-read as a pandas DataFrame -- InSilicoPerturberStats
     .get_stats() itself has no return statement in the installed version
     (confirmed by a real crash: it only calls cos_sims_df.to_csv(...) and
-    falls off the end, so the caller previously got None back)."""
+    falls off the end, so the caller previously got None back).
+
+    Monkeypatches geneformer.in_silico_perturber_stats's own
+    isp_aggregate_grouped_perturb with _isp_aggregate_grouped_perturb_fixed
+    (mode="aggregate_data" resolves that name as a module-level global at
+    call time, so this is enough to redirect it) -- see that function's
+    docstring for the real multi-gene bug this works around. Applied
+    unconditionally since the fix is a no-op for genes_perturbed of length 1
+    (Adamson's case)."""
+    import geneformer.in_silico_perturber_stats as isp_stats_module
     from geneformer import InSilicoPerturberStats
+
+    isp_stats_module.isp_aggregate_grouped_perturb = _isp_aggregate_grouped_perturb_fixed
 
     Path(output_directory).mkdir(parents=True, exist_ok=True)
     stats = InSilicoPerturberStats(
