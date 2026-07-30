@@ -128,3 +128,22 @@ stage3c_geneformer:
   # produces a real per-gene ranking. See BUILD_PLAN.md Sec.6 Stage 3c.
   stats_mode: aggregate_data
   seed: 42
+
+stage5_calibration:
+  # "Interpolated duplicate" positive control (BUILD_PLAN.md Sec.6 Stage 5):
+  # no true biological-replicate/batch column exists in this project's real
+  # data (confirmed directly against adata.obs for both datasets: only
+  # condition/cell_type/dose_val/control/condition_name, no batch/lane/
+  # replicate field) -- so the positive control is built from repeated
+  # random 50/50 splits of each condition's own real held-out cells into two
+  # pseudo-replicate halves, not genuine separate-batch replicates. An
+  # explicit, documented scope narrowing beyond BUILD_PLAN.md's own "held-out
+  # biological replicates" phrasing -- see calibration.py's docstring.
+  n_splits: 10
+  seed: 1
+  # Negative-control Pearson(delta control) reference: no_change's own value
+  # is mathematically NaN (a zero-vector prediction has undefined
+  # correlation with anything -- see Stage 4's Working Conventions). 0.0 is
+  # substituted as the principled "no linear relationship" reference instead
+  # -- a documented substitution, not a silent default.
+  pearson_negative_control_reference: 0.0
