@@ -38,7 +38,17 @@ channels:
 dependencies:
   - python=3.10
   - pip
-  - pytorch=2.*
+  # Pinned to 2.3.* (not a loose 2.*) -- confirmed by a real failure: scgpt
+  # pulls in torchtext (for torchtext.vocab.Vocab, used by train_scgpt.py's
+  # gene vocabulary, per scGPT's own Tutorial_Perturbation.ipynb), and
+  # PyPI's last torchtext release (0.18.0, since torchtext itself was
+  # discontinued by the PyTorch team in 2024) is a native extension built
+  # against torch 2.3's C++ ABI specifically. pip's resolver only checks
+  # scgpt's loose `torch>=1.13.0` version specifier, not binary ABI
+  # compatibility, so a newer torch (e.g. 2.5.1) installs "successfully"
+  # but torchtext's compiled .so then fails at import time with
+  # `OSError: ... undefined symbol: _ZN5torch3jit17parseSchemaOrNameERKSs`.
+  - pytorch=2.3.*
   # Match pytorch-cuda to the actual GPU's driver if it differs; 12.1 is
   # broadly compatible with Ampere (RTX 30-series) and newer.
   - pytorch-cuda=12.1
@@ -50,8 +60,32 @@ dependencies:
       # Pulls in scGPT's own pinned stack, including cell-gears<0.0.3 — this
       # is expected and fine, it's isolated in this env and unrelated to the
       # GEARS stage's cell-gears 0.1.2 in perturb-bench.
-      - scgpt
+      #
+      # Installed from a pinned GitHub commit, NOT PyPI's scgpt==0.2.4 --
+      # confirmed by a real failure: PyPI's release still imports the old
+      # flash-attn 1.x-only `flash_attn.flash_attention.FlashMHA` API, and
+      # (more importantly) doesn't have `scgpt.utils.load_pretrained`, which
+      # train_scgpt.py needs to correctly map the pretrained checkpoint's
+      # fused-QKV parameter names onto whatever attention module actually
+      # gets built. This commit is bowang-lab's own fix for exactly this
+      # (PR #351, "cuda-12.8 and FlashAttention 2.x compatibility", merged
+      # 2026-04-27, unreleased to PyPI as of this writing) -- see CLAUDE.md's
+      # scGPT section for the full story. Pinned to an exact commit (not a
+      # floating `main`) for reproducibility, per this project's own
+      # every-hyperparameter-and-dependency-is-pinned convention.
+      - scgpt @ git+https://github.com/bowang-lab/scGPT.git@cebd6fae655b9c585a4807daa3ac31bb764f06b4
       - einops>=0.6.0
+      # scgpt's own utils/util.py does `from IPython import get_ipython` at
+      # import time, but scgpt's pyproject.toml doesn't declare IPython as a
+      # dependency -- confirmed by a real failure (ModuleNotFoundError on a
+      # fresh env with everything else above installed).
+      - ipython
+      # train_scgpt.py's data loading reuses GEARS's PertData dataloaders
+      # (per scGPT's own Tutorial_Perturbation.ipynb), which are built with
+      # torch_geometric's DataLoader — confirmed by a real failure that
+      # scgpt's pinned cell-gears<0.0.3 does NOT pull this in transitively,
+      # so it must be listed explicitly here.
+      - torch_geometric
       # Downloads the pretrained scGPT checkpoint from its Google Drive
       # folder (see scripts/download_scgpt_checkpoint.py) — scGPT's weights
       # aren't distributed any other way as of this writing.

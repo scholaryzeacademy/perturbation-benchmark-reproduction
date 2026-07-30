@@ -53,7 +53,7 @@ import scgpt as scg
 from scgpt.model import TransformerGenerator
 from scgpt.loss import masked_mse_loss
 from scgpt.tokenizer.gene_tokenizer import GeneVocab
-from scgpt.utils import set_seed, map_raw_id_to_vocab_id, compute_perturbation_metrics
+from scgpt.utils import set_seed, map_raw_id_to_vocab_id, compute_perturbation_metrics, load_pretrained
 
 from src.stage1_data.load_data import CONFIG_PATH, SUPPORTED_DATASETS
 
@@ -288,13 +288,16 @@ def main() -> None:
         dropout=cfg["dropout"], pad_token="<pad>", pad_value=0,
         pert_pad_id=0, use_fast_transformer=cfg["use_fast_transformer"],
     )
-    model_dict = model.state_dict()
     pretrained_dict = torch.load(model_file, map_location=device)
-    pretrained_dict = {k: v for k, v in pretrained_dict.items() if any(k.startswith(p) for p in cfg["load_param_prefixs"])}
-    for k, v in pretrained_dict.items():
-        logger.info(f"Loading pretrained param {k} with shape {v.shape}")
-    model_dict.update(pretrained_dict)
-    model.load_state_dict(model_dict)
+    # scgpt.utils.load_pretrained (not our own filtering) handles the actual
+    # loading: it maps the checkpoint's fused-QKV flash-attn parameter names
+    # (self_attn.Wqkv.*) onto whatever attention module this model actually
+    # built (nn.MultiheadAttention's self_attn.in_proj_* when flash-attn
+    # isn't usable, or flash-attn's own wrapped naming when it is) before
+    # filtering to prefix/key/shape matches -- see CLAUDE.md's scGPT section
+    # for why a naive prefix-only filter (this project's original, simpler
+    # port) silently mismatches and crashes once flash-attn falls back.
+    model = load_pretrained(model, pretrained_dict, strict=False, prefix=cfg["load_param_prefixs"])
     model.to(device)
 
     criterion = masked_mse_loss
