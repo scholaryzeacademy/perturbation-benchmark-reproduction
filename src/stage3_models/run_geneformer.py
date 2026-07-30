@@ -106,6 +106,7 @@ def main() -> None:
     print(f"=== {len(test_conditions)} test conditions, running in silico perturbation for each ===", flush=True)
 
     all_stats = []
+    skipped = []
     for i, condition in enumerate(test_conditions):
         genes = perturbed_genes(condition)
         ensembl_ids = symbols_to_ensembl(pert_data.adata, genes)
@@ -129,34 +130,72 @@ def main() -> None:
         isp_dir = f"{output_dir}/isp_raw/{prefix}"
         stats_dir = f"{output_dir}/isp_stats/{prefix}"
         t0 = time.time()
-        run_in_silico_perturbation(
-            model_directory=args.model_dir,
-            tokenized_data_path=tokenized_path,
-            genes_to_perturb=ensembl_ids,
-            output_directory=isp_dir,
-            output_prefix=prefix,
-            perturb_type=s3c["perturb_type"],
-            emb_mode=s3c["emb_mode"],
-            cell_emb_style=s3c["cell_emb_style"],
-            forward_batch_size=s3c["forward_batch_size"],
-            nproc=s3c["nproc"],
-            model_version=s3c["model_version"],
-            max_ncells=s3c["max_ncells"],
-        )
-        df = compute_perturbation_stats(
-            input_directory=isp_dir,
-            output_directory=stats_dir,
-            output_prefix=prefix,
-            genes_perturbed=ensembl_ids,
-            mode=s3c["stats_mode"],
-            model_version=s3c["model_version"],
-        )
+        # Broad except is deliberate: a real full-dataset run over many
+        # conditions can hit per-condition failures this project doesn't
+        # control -- e.g. some gene pairs have zero control cells expressing
+        # both genes simultaneously ("delete" perturbation needs the gene(s)
+        # already tokenized in a cell to simulate deleting them), which
+        # raises a bare `RuntimeError` deep in geneformer's own
+        # perturber_utils.py with no more specific exception type to catch.
+        # One bad condition failing shouldn't lose every other condition's
+        # already-computed results (or abort a run that's hours into a large
+        # Norman pass) -- skip it, log why, and keep going. Ctrl-C/SystemExit
+        # still propagate normally since they're not Exception subclasses.
+        try:
+            run_in_silico_perturbation(
+                model_directory=args.model_dir,
+                tokenized_data_path=tokenized_path,
+                genes_to_perturb=ensembl_ids,
+                output_directory=isp_dir,
+                output_prefix=prefix,
+                perturb_type=s3c["perturb_type"],
+                emb_mode=s3c["emb_mode"],
+                cell_emb_style=s3c["cell_emb_style"],
+                forward_batch_size=s3c["forward_batch_size"],
+                nproc=s3c["nproc"],
+                model_version=s3c["model_version"],
+                max_ncells=s3c["max_ncells"],
+            )
+            df = compute_perturbation_stats(
+                input_directory=isp_dir,
+                output_directory=stats_dir,
+                output_prefix=prefix,
+                genes_perturbed=ensembl_ids,
+                mode=s3c["stats_mode"],
+                model_version=s3c["model_version"],
+            )
+        except Exception as e:
+            print(
+                f"[{i + 1}/{len(test_conditions)}] {condition} ({ensembl_ids}) "
+                f"FAILED after {time.time() - t0:.1f}s: {type(e).__name__}: {e}",
+                flush=True,
+            )
+            skipped.append(
+                {"condition": condition, "ensembl_ids": ensembl_ids, "error": f"{type(e).__name__}: {e}"}
+            )
+            continue
+
         df["condition"] = condition
         all_stats.append(df)
         print(
             f"[{i + 1}/{len(test_conditions)}] {condition} ({ensembl_ids}) "
             f"done in {time.time() - t0:.1f}s",
             flush=True,
+        )
+
+    if skipped:
+        skipped_df = pd.DataFrame(skipped)
+        skipped_path = f"{output_dir}/{args.dataset}_geneformer_skipped_conditions.csv"
+        skipped_df.to_csv(skipped_path, index=False)
+        print(
+            f"=== {len(skipped)}/{len(test_conditions)} condition(s) skipped after a per-condition "
+            f"failure -- see {skipped_path} ===",
+            flush=True,
+        )
+
+    if not all_stats:
+        raise RuntimeError(
+            f"All {len(test_conditions)} condition(s) failed -- see the skipped-conditions log above."
         )
 
     combined = pd.concat(all_stats, ignore_index=True)
