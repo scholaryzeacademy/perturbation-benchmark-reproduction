@@ -56,6 +56,7 @@ def main() -> None:
     parser.add_argument("--model-dir", required=True, help="path to the cloned Geneformer checkpoint directory (repo root for the default Geneformer-V2-316M)")
     parser.add_argument("--output-dir", default=None, help="defaults to ./data/geneformer_<dataset>")
     parser.add_argument("--max-conditions", type=int, default=None, help="only process the first N test conditions (smoke-testing)")
+    parser.add_argument("--conditions", default=None, help="comma-separated exact condition strings (e.g. 'CBL+PTPN9,DUSP9+ctrl') to process instead of a --max-conditions prefix -- for hand-picked smoke-test subsets spanning specific test subgroups (e.g. Norman's combo_seen0/1/2)")
     parser.add_argument("--max-ncells", type=int, default=None, help="override stage3c_geneformer.max_ncells (smoke-testing)")
     args = parser.parse_args()
     output_dir = args.output_dir or f"{args.data_dir}/geneformer_{args.dataset}"
@@ -94,17 +95,39 @@ def main() -> None:
     print(f"=== Tokenized in {time.time() - t0:.1f}s -> {tokenized_path} ===", flush=True)
 
     test_conditions = [c for c in pert_data.set2conditions["test"] if c != "ctrl"]
-    if args.max_conditions is not None:
+    if args.conditions is not None:
+        requested = [c.strip() for c in args.conditions.split(",")]
+        missing = [c for c in requested if c not in test_conditions]
+        if missing:
+            raise ValueError(f"--conditions not in the real test split: {missing}")
+        test_conditions = requested
+    elif args.max_conditions is not None:
         test_conditions = test_conditions[: args.max_conditions]
     print(f"=== {len(test_conditions)} test conditions, running in silico perturbation for each ===", flush=True)
 
-    isp_dir = f"{output_dir}/isp_raw"
-    stats_dir = f"{output_dir}/isp_stats"
     all_stats = []
     for i, condition in enumerate(test_conditions):
         genes = perturbed_genes(condition)
         ensembl_ids = symbols_to_ensembl(pert_data.adata, genes)
         prefix = _safe_prefix(condition)
+        # Per-condition subdirectories, not one shared isp_raw/isp_stats for
+        # the whole run: InSilicoPerturberStats.get_stats -> read_dictionaries
+        # scans EVERY "*_raw.pickle" file in input_data_directory by suffix
+        # match alone, not filtered by output_prefix (confirmed directly
+        # against in_silico_perturber_stats.py's read_dictionaries source).
+        # A shared directory across conditions means each condition's stats
+        # call re-reads every prior condition's pickle too -- harmless (if
+        # wasteful) when every condition is single-gene, since the dict keys
+        # are all plain ints and the later Ensembl_ID filter still isolates
+        # the right row. But mixing combo (tuple-keyed) and single-gene
+        # (int-keyed) conditions in the same run -- Norman's real case --
+        # makes get_gene_list's gene_list.sort() crash with
+        # `TypeError: '<' not supported between instances of 'int' and
+        # 'tuple'`, confirmed by a real crash processing a single-gene
+        # condition after 3 combo conditions had already written pickles to
+        # the same shared directory.
+        isp_dir = f"{output_dir}/isp_raw/{prefix}"
+        stats_dir = f"{output_dir}/isp_stats/{prefix}"
         t0 = time.time()
         run_in_silico_perturbation(
             model_directory=args.model_dir,

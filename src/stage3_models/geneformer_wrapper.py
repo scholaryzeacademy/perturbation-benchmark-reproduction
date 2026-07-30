@@ -279,6 +279,19 @@ def compute_perturbation_stats(
     import geneformer.in_silico_perturber_stats as isp_stats_module
     from geneformer import InSilicoPerturberStats
 
+    # Verified against ctheodoris/Geneformer commit 04c2b2e84da7c0f385c3f9ad
+    # 8f3ec24bab6650e5 (2026-05-26), the HEAD this project's local ./Geneformer
+    # clone happened to be on when this patch was written and validated --
+    # `pip show geneformer` reports a static "0.1.0" that doesn't track this,
+    # so the commit hash is the real version signal here. NOTE:
+    # environment-geneformer.yml does NOT pin a commit (unlike
+    # environment-scgpt.yml, which does) -- a fresh `git clone` following its
+    # instructions can land on a newer commit than this one, silently.
+    # If that ever happens, re-check upstream's
+    # in_silico_perturber_stats.py:isp_aggregate_grouped_perturb for whether
+    # `df["Gene"] = symbol` has been fixed there directly -- if so, this
+    # monkeypatch (and _isp_aggregate_grouped_perturb_fixed above) can likely
+    # be deleted rather than silently going stale.
     isp_stats_module.isp_aggregate_grouped_perturb = _isp_aggregate_grouped_perturb_fixed
 
     Path(output_directory).mkdir(parents=True, exist_ok=True)
