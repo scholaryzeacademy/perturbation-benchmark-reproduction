@@ -25,6 +25,21 @@ dependencies:
   # time, same as environment-scgpt.yml.
   - pytorch-cuda=12.1
   - pip:
+      # This project's Stage 1 loader (src/stage1_data/load_data.py) is
+      # built around GEARS's own PertData class for downloading/splitting
+      # data (BUILD_PLAN.md Sec.4/Sec.6: reuse GEARS's documented splits for
+      # comparability), and run_geneformer.py calls it like every other
+      # Stage 3 script does -- so this env needs cell-gears + torch_geometric
+      # too, even though Geneformer itself has no dependency on GEARS.
+      # Pinned to the same cell-gears version as perturb-bench/
+      # perturb-bench-gears-gpu (0.1.2); unlike environment-scgpt.yml, there's
+      # no upstream version conflict forcing an older pin here since
+      # Geneformer's own pyproject.toml doesn't declare cell-gears at all.
+      # Confirmed missing by a real failure: `python -m
+      # src.stage3_models.run_geneformer` raised ModuleNotFoundError on
+      # `gears` the first time this env was actually used.
+      - cell-gears==0.1.2
+      - torch_geometric
       - anndata>=0.9
       - bitsandbytes>=0.45.5
       - datasets>=2.12

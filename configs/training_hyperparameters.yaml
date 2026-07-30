@@ -70,3 +70,61 @@ stage3b_scgpt:
   max_seq_len: 1536
   load_param_prefixs: [encoder, value_encoder, transformer_encoder]
   seed: 42
+
+stage3c_geneformer:
+  # Zero-shot only -- no fine-tuning, no ridge decoder (see BUILD_PLAN.md Sec.6
+  # Stage 3c's honest-scope note: InSilicoPerturber's public API only exposes
+  # cosine-shift stats, not raw embeddings, so there's nothing to decode).
+  # Geneformer-V2-316M is the repo's current default checkpoint -- its files
+  # (config.json/model.safetensors/etc.) sit directly at the repo root, not
+  # under a named subdirectory. Corrected 2026-07-30 after actually cloning
+  # ctheodoris/Geneformer and reading its live README, which states this
+  # explicitly ("The current default model in the main directory of the
+  # repository is Geneformer-V2-316M") -- an earlier web-search-derived note
+  # here said gf-12L-95M-i4096, which does not exist in the current repo at
+  # all. Don't trust web-search summaries over the actual cloned repo state
+  # for this kind of fact again.
+  pretrained_model: Geneformer-V2-316M
+  # --model-dir for run_geneformer.py should point at the repo root itself
+  # (e.g. ./Geneformer), not a subdirectory, since the default checkpoint's
+  # files live there directly.
+  model_version: V2
+  model_input_size: 4096
+  # "delete" = knockout-style perturbation (remove the gene from the rank
+  # value encoding) -- matches Adamson/Norman's CRISPR-based single/double
+  # knockdowns better than "overexpress" (move gene to front of encoding).
+  perturb_type: delete
+  # "cls" not "cell": V2 checkpoints tokenize with special_token=True, which
+  # prepends a <cls> token to every sequence. InSilicoPerturber.perturb_data
+  # hard-requires emb_mode to be "cls"/"cls_and_gene" whenever the first
+  # token is <cls> (in_silico_perturber.py, ~line 479) and raises otherwise --
+  # confirmed by a real crash on the first real run with emb_mode: cell
+  # ("Emb mode 'cls' or 'cls_and_gene' required when first token is <cls>.").
+  # cell_emb_style is kept even though the "cls" code path doesn't read it
+  # (it's only consulted by the "cell"/"cell_and_gene" branches) -- harmless
+  # to leave set, and cls is InSilicoPerturber's own upstream default anyway.
+  emb_mode: cls
+  cell_emb_style: mean_pool
+  # 100 (the value GEARS/scGPT-style "just use a big batch" instinct suggests)
+  # OOMs on a 24GB RTX 4090 -- confirmed by a real crash:
+  # `torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 11.00 GiB`
+  # from BertForMaskedLM's vocab-size(20275) prediction head at
+  # batch=100/seq~1587. The real driver is output_hidden_states=True (needed
+  # so get_embs can select layer_to_quant) retaining all 19 layers'
+  # batch*seq*hidden activations simultaneously, ~13-15GB at batch=100 alone
+  # on Adamson control cells (observed tokenized length: median 1046, max
+  # 1587, well under the 4096 model_input_size cap). 16 keeps peak usage
+  # comfortably under 22GB even at the full 4096-token cap (worst case for
+  # Norman): 16 * 4096 * 1152 * 4B * 19 layers =~ 5.7GB for hidden states +
+  # 16 * 4096 * 20275 * 4B =~ 5.3GB for the vocab head =~ 11GB total.
+  forward_batch_size: 16
+  nproc: 4
+  # None = use all available control cells as the zero-shot perturbation
+  # substrate; set an int here to subsample for a faster smoke-scale run.
+  max_ncells: null
+  # InSilicoPerturberStats mode -- "aggregate_data" reports mean/stdev cosine
+  # shift per perturbed gene with no null-distribution generation step
+  # required (unlike "vs_null"/"mixture_model"), the simplest mode that still
+  # produces a real per-gene ranking. See BUILD_PLAN.md Sec.6 Stage 3c.
+  stats_mode: aggregate_data
+  seed: 42

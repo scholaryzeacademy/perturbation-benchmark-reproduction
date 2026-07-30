@@ -10,6 +10,11 @@ data_scgpt/
 checkpoints/
 save/
 
+# git-lfs clone of ctheodoris/Geneformer (see CLAUDE.md Environment setup) --
+# a separate repo with its own .git and multi-GB pretrained checkpoints,
+# never meant to be committed here.
+Geneformer/
+
 __pycache__/
 *.pyc
 .pytest_cache/

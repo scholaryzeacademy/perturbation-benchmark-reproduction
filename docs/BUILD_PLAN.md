@@ -141,10 +141,12 @@ Three baselines, each deliberately simple and fully documented:
 
 ### Stage 3c — Geneformer (Foundation Model, Zero-Shot In Silico Perturbation)
 - Use Geneformer's built-in in silico perturbation functionality in zero-shot mode (no task-specific fine-tuning), since this is one of its headline documented capabilities and a meaningfully different evaluation regime from scGPT's fine-tuned approach
+- **Honest scope note, decided after checking Geneformer's actual public API (not assumed up front):** `InSilicoPerturber`'s documented, public interface only ever writes out *cosine-similarity shift scalars* per perturbed gene (`InSilicoPerturberStats`'s gene-ranking output) — it does not expose the raw perturbed-cell embedding vector. Ahlmann-Eltze et al. 2025 got an MSE/Pearson-comparable number out of Geneformer by fitting a ridge-regression decoder on top of perturbed embeddings, but doing that ourselves would mean reaching into undocumented internal token-manipulation/embedding-extraction functions with no official example to port against — a materially higher risk of a silently-wrong implementation than GEARS/scGPT's ports, both of which followed complete official tutorials. **Decision: use the public, documented API as-is.** Stage 3c therefore reports Geneformer's native output — per-gene cosine-shift statistics ranking which of the dataset's actually-perturbed genes shift cell state the most — not a per-gene expression prediction. This means Geneformer is **not** directly comparable to GEARS/scGPT/baselines under Stage 4's MSE@20DEG/Pearson(Δcontrol) definitions; see Stage 4 and Stage 6 below for how this is handled in reporting.
 - **Owner:** AI Engineer
 
 ### Stage 4 — Conventional Metrics
 - Compute MSE@20DEG and Pearson(Δcontrol) for every model (including all three baselines) on the held-out test perturbations, exactly matching field-standard metric definitions so our numbers are comparable to published results
+- **Geneformer exception (see Stage 3c):** Geneformer's zero-shot output is a per-gene cosine-shift ranking, not a predicted expression profile, so MSE@20DEG/Pearson(Δcontrol) don't apply to it the way they do to GEARS/scGPT/baselines. Report Geneformer's cosine-shift stats as their own table/section rather than forcing them into the same numeric columns — an explicitly scoped exception, not a silently-dropped model.
 - **Owner:** Biostatistics
 
 ### Stage 5 — Metric Calibration Framework (Honest Scope)
@@ -154,7 +156,7 @@ This is the project's key differentiating contribution, and also where we need t
 - **Owner:** Biostatistics (this stage should have explicit statistical sign-off given its centrality to the project's credibility)
 
 ### Stage 6 — Honest Reporting
-- Present results as a table: each model (including baselines) × each metric (conventional and calibration-aware), on both datasets
+- Present results as a table: each model (including baselines) × each metric (conventional and calibration-aware), on both datasets. **Geneformer is the one documented exception** (see Stage 3c/4): it gets its own cosine-shift ranking table alongside the main results table, rather than slotting into the same MSE@20DEG/Pearson columns, since its zero-shot output isn't a predicted expression profile.
 - Write an explicit discussion section addressing: does our reproduction match Ahlmann-Eltze et al.'s conclusion under conventional metrics? Does recalibrating shift the ranking, consistent with the rebuttal's argument? Where do our specific numbers diverge from either paper's published numbers, and what's the most likely explanation (dataset subset differences, hyperparameter differences, compute-budget differences)?
 - **Owner:** Whole team reviews before publication; Biostatistics has final sign-off on any statistical claim
 
