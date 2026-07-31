@@ -1,0 +1,253 @@
+<!--
+  Single-theme by design: this file's deliverable form is a printed page
+  (rendered to PDF via headless Chrome), not a screen artifact viewers can
+  toggle between light/dark. Committing to one paper-like visual world here
+  is the deliberate choice, not an omission.
+-->
+<title>Perturbation Benchmark Reproduction — One-Page Summary</title>
+<meta charset="utf-8" />
+<style>
+  @page { size: letter; margin: 0.55in 0.6in; }
+
+  :root {
+    --bg: #f6f7f5;
+    --panel: #ffffff;
+    --ink: #10201c;
+    --muted: #55655f;
+    --line: #d7ded9;
+    --accent: #146b60;
+    --accent-soft: #e4efec;
+    --warn: #a15a1f;
+    --warn-soft: #f5e9de;
+    --mono: "Liberation Mono", "Nimbus Mono PS", "Courier New", monospace;
+    --serif: "Liberation Serif", "Nimbus Roman", "Times New Roman", serif;
+    --sans: "Nimbus Sans", "Liberation Sans", "Helvetica Neue", Arial, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+  }
+  body {
+    width: 7.4in;
+    margin: 0 auto;
+    padding: 0.15in 0 0.3in;
+  }
+
+  h1, h2, h3 { font-family: var(--serif); text-wrap: balance; margin: 0; }
+
+  .eyebrow {
+    font-family: var(--sans);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 700;
+  }
+
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    border-bottom: 2px solid var(--ink);
+    padding-bottom: 10px;
+    margin-bottom: 14px;
+  }
+  header h1 { font-size: 24px; font-weight: 700; line-height: 1.15; max-width: 5.6in; }
+  header .meta { text-align: right; font-size: 10.5px; color: var(--muted); line-height: 1.5; }
+
+  .dek {
+    font-size: 12.5px;
+    color: var(--muted);
+    line-height: 1.55;
+    margin: 0 0 16px;
+    max-width: 6.9in;
+  }
+
+  .statgrid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .stat {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-top: 3px solid var(--accent);
+    padding: 9px 10px 10px;
+  }
+  .stat .label {
+    font-size: 8.7px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .stat .value {
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--ink);
+    line-height: 1.2;
+  }
+  .stat .sub { font-size: 9.5px; color: var(--muted); margin-top: 2px; }
+
+  section { margin-bottom: 14px; }
+  h2.section-title {
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink);
+    font-family: var(--sans);
+    font-weight: 700;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 4px;
+    margin-bottom: 8px;
+  }
+
+  p.body-text { font-size: 11.3px; line-height: 1.62; margin: 0 0 8px; color: var(--ink); }
+  p.body-text:last-child { margin-bottom: 0; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10.3px;
+  }
+  thead th {
+    text-align: left;
+    font-size: 8.7px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 700;
+    border-bottom: 1px solid var(--ink);
+    padding: 4px 8px 5px 0;
+  }
+  tbody td {
+    padding: 4.5px 8px 4.5px 0;
+    border-bottom: 1px solid var(--line);
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+  }
+  tbody td:first-child { font-family: var(--sans); font-weight: 600; }
+  tbody tr.dataset-row td {
+    font-family: var(--sans);
+    font-weight: 700;
+    color: var(--accent);
+    background: var(--accent-soft);
+    padding-top: 5px;
+    padding-bottom: 5px;
+    border-bottom: 1px solid var(--accent);
+  }
+  td.win { color: var(--accent); font-weight: 700; }
+
+  .callout {
+    background: var(--warn-soft);
+    border-left: 3px solid var(--warn);
+    padding: 8px 12px;
+    font-size: 10.3px;
+    line-height: 1.55;
+    color: var(--ink);
+  }
+  .callout strong { color: var(--warn); }
+
+  footer {
+    margin-top: 14px;
+    padding-top: 8px;
+    border-top: 1px solid var(--line);
+    font-size: 8.7px;
+    color: var(--muted);
+    line-height: 1.5;
+    display: flex;
+    justify-content: space-between;
+    gap: 20px;
+  }
+  footer .cite { max-width: 5in; }
+</style>
+
+<header>
+  <h1>Foundation Models vs. Simple Baselines on Single-Cell Perturbation Prediction</h1>
+  <div class="meta">
+    <div class="eyebrow">One-Page Summary</div>
+    Independent reproduction<br />
+    Norman (2019) &amp; Adamson (2016) Perturb-seq datasets<br />
+    2026-07-31
+  </div>
+</header>
+
+<p class="dek">
+  An independent, transparent reproduction of an unresolved 2025 debate: does deep learning beat simple linear
+  baselines at predicting post-perturbation gene expression, or is that conclusion an artifact of uncalibrated
+  metrics? Three baselines, GEARS, and scGPT were benchmarked head-to-head on both datasets under conventional
+  metrics <em>and</em> a calibration framework that scores each model against the gap between a no-signal
+  negative control and a best-achievable positive control.
+</p>
+
+<div class="statgrid">
+  <div class="stat">
+    <div class="label">Adamson (single-gene)</div>
+    <div class="value">scGPT wins</div>
+    <div class="sub">both metrics, clearly — MSE@20DEG 0.124 vs. ~0.25 for the field</div>
+  </div>
+  <div class="stat">
+    <div class="label">Norman (combinatorial)</div>
+    <div class="value">Split decision</div>
+    <div class="sub">GEARS best on MSE@20DEG, ridge best on Pearson(&Delta;control)</div>
+  </div>
+  <div class="stat">
+    <div class="label">Calibration verdict</div>
+    <div class="value">No ranking flip</div>
+    <div class="sub">calibrated fractions preserve the raw-metric ordering on both datasets</div>
+  </div>
+  <div class="stat">
+    <div class="label">Models compared</div>
+    <div class="value">5 + 1</div>
+    <div class="sub">no-change, mean, ridge, GEARS, scGPT — Geneformer reported separately</div>
+  </div>
+</div>
+
+<section>
+  <h2 class="section-title">Results at a glance</h2>
+  <table>
+    <thead>
+      <tr><th>Model</th><th>MSE@20DEG</th><th>Pearson(&Delta;ctrl)</th><th>Calib. MSE frac.</th><th>Calib. Pearson frac.</th></tr>
+    </thead>
+    <tbody>
+      <tr class="dataset-row"><td colspan="5">Adamson — single-gene perturbations</td></tr>
+      <tr><td>no_change</td><td>0.3800</td><td>—</td><td>0.0000</td><td>—</td></tr>
+      <tr><td>mean</td><td>0.2478</td><td>0.6357</td><td>0.3492</td><td class="win">0.6741</td></tr>
+      <tr><td>ridge</td><td>0.2482</td><td>0.6357</td><td>0.3483</td><td class="win">0.6741</td></tr>
+      <tr><td>GEARS</td><td>0.2465</td><td>0.5557</td><td>0.3526</td><td>0.5892</td></tr>
+      <tr><td>scGPT</td><td class="win">0.1240</td><td class="win">0.6405</td><td class="win">0.5720</td><td>0.6710</td></tr>
+      <tr class="dataset-row"><td colspan="5">Norman — combinatorial perturbations</td></tr>
+      <tr><td>no_change</td><td>0.4368</td><td>—</td><td>0.0000</td><td>—</td></tr>
+      <tr><td>mean</td><td>0.3316</td><td>0.5786</td><td>0.2439</td><td>0.6427</td></tr>
+      <tr><td>ridge</td><td>0.2308</td><td class="win">0.6732</td><td>0.4775</td><td class="win">0.7478</td></tr>
+      <tr><td>GEARS</td><td class="win">0.1689</td><td>0.5831</td><td class="win">0.6210</td><td>0.6478</td></tr>
+      <tr><td>scGPT</td><td>0.2235</td><td>0.5505</td><td>0.5077</td><td>0.6239</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<div class="callout">
+  <strong>Scope note.</strong> The positive control is built from repeated random 50/50 splits of each real test
+  condition's own held-out cells (this dataset has no true biological-replicate metadata) — a documented
+  narrowing of the calibration method, not a full reproduction of the rebuttal paper's 13-metric framework.
+  Geneformer (zero-shot) outputs a per-cell cosine-shift ranking, not a predicted expression profile, so it is
+  excluded from the table above and reported in its own ranking table in the full write-up.
+</div>
+
+<footer>
+  <div class="cite">
+    Ahlmann-Eltze, Huber &amp; Anders, <em>Nat. Methods</em> 2025 · Deep Learning-Based Genetic Perturbation
+    Models... Well-Calibrated Metrics, <em>bioRxiv</em> Oct. 2025 · full methodology in <code>METHODS.md</code>,
+    full discussion in <code>reports/final_writeup/technical_writeup.md</code>
+  </div>
+  <div>MIT-licensed reproduction — see <code>LICENSES.md</code></div>
+</footer>
